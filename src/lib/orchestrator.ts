@@ -5,7 +5,9 @@ import { GitHubClient, GitHubIssue } from "./githubClient";
 import { IssueState, ProcessStatus } from "./models";
 import { RepoManager } from "./repoManager";
 import { StateManager } from "./stateManager";
-import { ClaudeProcessor, Notifier } from "./processors/claude";
+import { ClaudeProcessor } from "./processors/claude";
+import { CodexProcessor } from "./processors/codex";
+import { ProcessorNotifier } from "./processors/shared";
 import { SlackNotifier } from "../notifiers/slackNotifier";
 import { TelegramNotifier } from "../notifiers/telegramNotifier";
 
@@ -13,22 +15,42 @@ interface ExtendedIssue extends GitHubIssue {
   repo_name?: string;
 }
 
-function isSlackNotifier(notifier: Notifier): notifier is SlackNotifier {
+function isSlackNotifier(notifier: ProcessorNotifier): notifier is SlackNotifier {
   return notifier instanceof SlackNotifier;
 }
 
+function formatTitle(displayName: string, title: string): string {
+  return `[${displayName}] ${title}`;
+}
+
+interface ProcessorDefinition {
+  name: string;
+  displayName: string;
+  labels: {
+    working: string;
+    completed: string;
+    failed: string;
+  };
+  runner: {
+    processIssue(
+      issueNumber: number,
+      agentIndex: number,
+      stateManager: StateManager,
+      repoName?: string
+    ): Promise<{ status: ProcessStatus; sessionId?: string | null }>;
+  };
+}
+
 export class IssueOrchestrator {
-  private readonly stateManager: StateManager;
+  private readonly stateManager = new StateManager();
   private readonly githubClient: GitHubClient;
   private readonly repoManager: RepoManager;
-  private readonly processor: ClaudeProcessor;
-  private readonly notifiers: Notifier[];
+  private readonly notifiers: ProcessorNotifier[] = [];
+  private readonly processors: ProcessorDefinition[];
 
   constructor(private readonly config: Config) {
-    this.stateManager = new StateManager();
     this.githubClient = new GitHubClient(this.config.githubToken);
 
-    this.notifiers = [];
     if (this.config.telegramBotToken && this.config.telegramChatId) {
       this.notifiers.push(new TelegramNotifier(this.config.telegramBotToken, this.config.telegramChatId));
     }
@@ -37,7 +59,29 @@ export class IssueOrchestrator {
     }
 
     this.repoManager = new RepoManager(this.config);
-    this.processor = new ClaudeProcessor(this.config, this.notifiers, this.repoManager);
+
+    this.processors = [
+      {
+        name: "claude",
+        displayName: "Claude",
+        labels: {
+          working: "claude-working",
+          completed: "claude-completed",
+          failed: "claude-failed",
+        },
+        runner: new ClaudeProcessor(this.config, this.notifiers, this.repoManager),
+      },
+      {
+        name: "codex",
+        displayName: "Codex",
+        labels: {
+          working: "codex-working",
+          completed: "codex-completed",
+          failed: "codex-failed",
+        },
+        runner: new CodexProcessor(this.config, this.notifiers, this.repoManager),
+      },
+    ];
   }
 
   private async ensureState(): Promise<void> {
@@ -48,6 +92,9 @@ export class IssueOrchestrator {
     for (const repoConfig of this.config.githubRepos) {
       const basePath = resolve(repoConfig.base_repo_path.replace(/^~\//, `${process.env.HOME ?? ""}/`));
       await mkdir(basePath, { recursive: true });
+      for (const processor of this.processors) {
+        await mkdir(resolve(basePath, processor.name), { recursive: true });
+      }
     }
   }
 
@@ -71,25 +118,35 @@ export class IssueOrchestrator {
 
     console.info(`Found ${allIssues.length} total ready issues`);
 
-    const activeIssues = this.stateManager.getActiveIssues();
-    const newIssues = allIssues.filter((issue) => !activeIssues.includes(issue.number));
+    for (const processor of this.processors) {
+      await this.runProcessorCycle(processor, allIssues);
+    }
 
-    const availableSlots = this.config.maxConcurrent - activeIssues.length;
-    if (availableSlots <= 0 || !newIssues.length) {
-      await this.stateManager.saveStates();
+    await this.stateManager.saveStates();
+  }
+
+  private async runProcessorCycle(processor: ProcessorDefinition, issues: ExtendedIssue[]): Promise<void> {
+    const activeStates = this.stateManager.getActiveStatesByProcessor(processor.name);
+    const activeIssueNumbers = new Set(activeStates.map((state) => state.issue_number));
+    const availableSlots = this.config.maxConcurrent - activeStates.length;
+
+    if (availableSlots <= 0) {
+      return;
+    }
+
+    const newIssues = issues.filter((issue) => !activeIssueNumbers.has(issue.number));
+    if (!newIssues.length) {
       return;
     }
 
     const issuesToProcess = newIssues.slice(0, availableSlots);
-    const tasks = issuesToProcess.map((issue) => this.processIssue(issue));
-    await Promise.all(tasks);
-    await this.stateManager.saveStates();
+    await Promise.all(issuesToProcess.map((issue) => this.processIssueForProcessor(processor, issue)));
   }
 
-  private async processIssue(issue: ExtendedIssue): Promise<void> {
-    const availableIndex = this.stateManager.getAvailableAgentIndex(this.config.maxConcurrent);
+  private async processIssueForProcessor(processor: ProcessorDefinition, issue: ExtendedIssue): Promise<void> {
+    const availableIndex = this.stateManager.getAvailableAgentIndex(processor.name, this.config.maxConcurrent);
     if (availableIndex === undefined) {
-      console.warn(`No available agent slots for issue #${issue.number}`);
+      console.warn(`[${processor.displayName}] No available agent slots for issue #${issue.number}`);
       return;
     }
 
@@ -97,39 +154,42 @@ export class IssueOrchestrator {
     const state = new IssueState({
       issue_number: issue.number,
       status: ProcessStatus.Running,
-      branch: `issue-${issue.number}`,
+      branch: `issue-${issue.number}-${processor.name}`,
       start_time: new Date().toISOString(),
       agent_index: availableIndex,
       repo_name: repoName,
+      processor_name: processor.name,
       session_id: null,
     });
 
-    this.stateManager.setState(issue.number, state);
+    this.stateManager.setState(issue.number, processor.name, state);
     await this.stateManager.saveStates();
 
     try {
       await this.githubClient.updateIssueLabels(issue.number, {
-        add: ["claude-working"],
-        remove: ["ready-for-claude"],
+        add: [processor.labels.working],
+        remove: ["ready-for-claude", processor.labels.completed, processor.labels.failed],
       }, repoName);
 
+      const formattedTitle = formatTitle(processor.displayName, issue.title);
       await Promise.all(
         this.notifiers.map((notifier) =>
           isSlackNotifier(notifier)
-            ? notifier.notifyStart(issue.number, issue.title, repoName)
-            : notifier.notifyStart(issue.number, issue.title)
+            ? notifier.notifyStart(issue.number, formattedTitle, repoName)
+            : notifier.notifyStart(issue.number, formattedTitle)
         )
       );
 
-      const result = await this.processor.processIssue(issue.number, availableIndex, this.stateManager, repoName);
-      const currentState = this.stateManager.getState(issue.number);
+      const result = await processor.runner.processIssue(issue.number, availableIndex, this.stateManager, repoName);
+      const currentState = this.stateManager.getState(issue.number, processor.name);
+
       if (currentState) {
         if (result.sessionId) {
           currentState.session_id = result.sessionId;
         }
         currentState.status = result.status;
         currentState.end_time = new Date().toISOString();
-        this.stateManager.setState(issue.number, currentState);
+        this.stateManager.setState(issue.number, processor.name, currentState);
         await this.stateManager.saveStates();
       }
 
@@ -148,11 +208,11 @@ export class IssueOrchestrator {
         );
 
         await this.githubClient.updateIssueLabels(issue.number, {
-          add: ["claude-completed"],
-          remove: ["claude-working"],
+          add: [processor.labels.completed],
+          remove: [processor.labels.working],
         }, repoName);
 
-        this.stateManager.removeState(issue.number);
+        this.stateManager.removeState(issue.number, processor.name);
         await this.stateManager.saveStates();
       } else if (result.status === ProcessStatus.NeedsInput && currentState?.last_output) {
         await Promise.all(
@@ -164,19 +224,19 @@ export class IssueOrchestrator {
         );
       } else if (result.status === ProcessStatus.Failed) {
         await this.githubClient.updateIssueLabels(issue.number, {
-          add: ["claude-failed"],
-          remove: ["claude-working", "ready-for-claude"],
+          add: [processor.labels.failed],
+          remove: [processor.labels.working, "ready-for-claude"],
         }, repoName);
-        this.stateManager.removeState(issue.number);
+        this.stateManager.removeState(issue.number, processor.name);
         await this.stateManager.saveStates();
       }
     } catch (error) {
-      console.error(`Error processing issue #${issue.number}`, error);
+      console.error(`Error processing issue #${issue.number} with ${processor.displayName}`, error);
       await this.githubClient.updateIssueLabels(issue.number, {
-        add: ["claude-failed"],
-        remove: ["claude-working", "ready-for-claude"],
+        add: [processor.labels.failed],
+        remove: [processor.labels.working, "ready-for-claude"],
       }, repoName).catch(() => undefined);
-      this.stateManager.removeState(issue.number);
+      this.stateManager.removeState(issue.number, processor.name);
       await this.stateManager.saveStates();
     } finally {
       await this.stateManager.saveStates();

@@ -4,12 +4,12 @@ import { ProcessStatus } from "../models";
 import { StateManager } from "../stateManager";
 import { spawnProcess } from "../../utils/process";
 
-
-
 import { buildIssuePrompt } from "./prompt";
 import { ProcessorNotifier, prepareIssueWorkspace, broadcastProcessorError } from "./shared";
 
 export type CodexNotifier = ProcessorNotifier;
+
+const PROCESSOR_NAME = "codex";
 
 export class CodexProcessor {
   private readonly config: Config;
@@ -28,7 +28,7 @@ export class CodexProcessor {
     stateManager: StateManager,
     repoName?: string
   ): Promise<{ status: ProcessStatus; sessionId?: string | null }> {
-    const { repoPath } = await prepareIssueWorkspace(this.repoManager, issueNumber, agentIndex, repoName);
+    const { repoPath } = await prepareIssueWorkspace(this.repoManager, PROCESSOR_NAME, issueNumber, agentIndex, repoName);
 
     const commandPrompt = buildIssuePrompt(issueNumber);
 

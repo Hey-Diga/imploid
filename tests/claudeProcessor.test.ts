@@ -68,8 +68,9 @@ describe("ClaudeProcessor", () => {
   const makeStateManager = (issueNumber: number) => {
     const state = new IssueState({
       issue_number: issueNumber,
+      processor_name: "claude",
       status: ProcessStatus.Running,
-      branch: `issue-${issueNumber}`,
+      branch: `issue-${issueNumber}-claude`,
       start_time: new Date().toISOString(),
     });
     const store = new Map<number, IssueState>([[issueNumber, state]]);
@@ -87,7 +88,10 @@ describe("ClaudeProcessor", () => {
   };
 
   const makeRepoManager = (repoPath: string) => ({
-    ensureRepoClone: mock(async () => repoPath),
+    ensureRepoClone: mock(async (processorName: string) => {
+      expect(processorName).toBe("claude");
+      return repoPath;
+    }),
     validateBranchReady: mock(async () => true),
   });
 
@@ -109,7 +113,7 @@ describe("ClaudeProcessor", () => {
         return { code: 0, stdout: "", stderr: "" };
       }
       if (command[1] === "branch") {
-        return { code: 0, stdout: `issue-${issueNumber}\n`, stderr: "" };
+        return { code: 0, stdout: `issue-${issueNumber}-claude\n`, stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -129,11 +133,12 @@ describe("ClaudeProcessor", () => {
     const result = await processor.processIssue(issueNumber, 0, stateManager as any, "owner/repo");
 
     expect(result).toEqual({ status: ProcessStatus.Completed, sessionId: `sess-${issueNumber}` });
-    expect(commands).toContain("git show-ref --verify --quiet refs/heads/issue-321");
-    expect(commands).toContain("git checkout -b issue-321");
+    expect(commands).toContain("git show-ref --verify --quiet refs/heads/issue-321-claude");
+    expect(commands).toContain("git checkout -b issue-321-claude");
     expect(commands).toContain("git branch --show-current");
-    expect(repoManager.ensureRepoClone.mock.calls[0][0]).toBe(0);
-    expect(repoManager.ensureRepoClone.mock.calls[0][1]).toBe("owner/repo");
+    expect(repoManager.ensureRepoClone.mock.calls[0][0]).toBe("claude");
+    expect(repoManager.ensureRepoClone.mock.calls[0][1]).toBe(0);
+    expect(repoManager.ensureRepoClone.mock.calls[0][2]).toBe("owner/repo");
     expect(spawnProcessMock.mock.calls[0][0][0]).toBe("claude");
     expect(stateManager.store.get(issueNumber)?.session_id).toBe(`sess-${issueNumber}`);
     expect(notifier.notifyError.mock.calls.length).toBe(0);
@@ -154,7 +159,7 @@ describe("ClaudeProcessor", () => {
         return { code: 0, stdout: "", stderr: "" };
       }
       if (command[1] === "branch") {
-        return { code: 0, stdout: `issue-${issueNumber}\n`, stderr: "" };
+        return { code: 0, stdout: `issue-${issueNumber}-claude\n`, stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -193,7 +198,7 @@ describe("ClaudeProcessor", () => {
         return { code: 0, stdout: "", stderr: "" };
       }
       if (command[1] === "branch") {
-        return { code: 0, stdout: `issue-${issueNumber}\n`, stderr: "" };
+        return { code: 0, stdout: `issue-${issueNumber}-claude\n`, stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };

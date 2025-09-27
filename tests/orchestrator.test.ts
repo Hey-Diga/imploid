@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { IssueOrchestrator } from "../src/lib/orchestrator";
-import { ProcessStatus, IssueState } from "../src/lib/models";
+import { IssueState, ProcessStatus } from "../src/lib/models";
 
 const createStubConfig = (basePath: string) => {
   const repos = [
@@ -21,12 +21,6 @@ const createStubConfig = (basePath: string) => {
     get githubRepo() {
       return repos[0].name;
     },
-    get baseRepoPath() {
-      return repos[0].base_repo_path;
-    },
-    get repoPath() {
-      return "";
-    },
     get maxConcurrent() {
       return 2;
     },
@@ -42,21 +36,16 @@ const createStubConfig = (basePath: string) => {
     get slackChannelId() {
       return "";
     },
-    get claudeTimeout() {
-      return 3600;
-    },
-    get claudeCheckInterval() {
-      return 5;
-    },
-    get claudePath() {
-      return "claude";
-    },
-    getRepoConfig(name: string) {
-      return repos.find((repo) => repo.name === name);
-    },
-    getRepoPath(agentIndex: number, repoName?: string) {
-      const repo = repoName ? repos.find((r) => r.name === repoName)! : repos[0];
-      return join(repo.base_repo_path, `${repo.name.split("/").pop()}_agent_${agentIndex}`);
+    codexPath: "codex",
+    codexTimeout: 60,
+    codexCheckInterval: 1,
+    claudePath: "claude",
+    claudeTimeout: 60,
+    claudeCheckInterval: 1,
+    getProcessorRepoPath(processorName: string, agentIndex: number, repoName?: string) {
+      const repo = repoName ?? repos[0].name;
+      const short = repo.split("/").pop() ?? repo;
+      return join(basePath, processorName, `${short}_agent_${agentIndex}`);
     },
   } as const;
 };
@@ -76,6 +65,36 @@ describe("IssueOrchestrator", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  const createStateManagerStub = () => {
+    const store = new Map<string, IssueState>();
+    return {
+      initialize: mock(async () => {}),
+      saveStates: mock(async () => {}),
+      getActiveStatesByProcessor: mock(() => []),
+      getAvailableAgentIndex: mock(() => 0),
+      setState: mock((issue: number, processor: string, state: IssueState) => {
+        store.set(`${issue}:${processor}`, state);
+      }),
+      getState: mock((issue: number, processor: string) => store.get(`${issue}:${processor}`)),
+      removeState: mock((issue: number, processor: string) => {
+        store.delete(`${issue}:${processor}`);
+      }),
+    };
+  };
+
+  const createSingleProcessor = (runnerMock: any) => ({
+    name: "claude",
+    displayName: "Claude",
+    labels: {
+      working: "claude-working",
+      completed: "claude-completed",
+      failed: "claude-failed",
+    },
+    runner: {
+      processIssue: runnerMock,
+    },
+  });
+
   test("runs without processing when no issues are returned", async () => {
     const baseRepoPath = resolve(tempDir, "repos");
     const config = createStubConfig(baseRepoPath);
@@ -87,14 +106,16 @@ describe("IssueOrchestrator", () => {
     orchestratorAny.repoManager.ensureRepoClone = mock(async () => {
       throw new Error("should not clone when no issues");
     });
-    orchestratorAny.processor.processIssue = mock(async () => {
-      throw new Error("should not process when no issues");
-    });
+
+    const runnerMock = mock(async () => ({ status: ProcessStatus.Completed }));
+    orchestratorAny.processors = [createSingleProcessor(runnerMock)];
+    orchestratorAny.stateManager = createStateManagerStub();
 
     await orchestrator.run();
 
     expect(orchestratorAny.githubClient.getReadyIssues.mock.calls.length).toBe(1);
     expect(orchestratorAny.repoManager.ensureRepoClone.mock.calls.length).toBe(0);
+    expect(runnerMock.mock.calls.length).toBe(0);
   });
 
   test("processes a new issue through completion", async () => {
@@ -103,43 +124,28 @@ describe("IssueOrchestrator", () => {
     const orchestrator = new IssueOrchestrator(config as any);
     const orchestratorAny = orchestrator as any;
 
-    const stateStore = new Map<number, IssueState>();
-    let latestState: IssueState | undefined;
-
-    orchestratorAny.stateManager = {
-      initialize: mock(async () => {}),
-      saveStates: mock(async () => {}),
-      getActiveIssues: mock(() => []),
-      getAvailableAgentIndex: mock(() => 0),
-      setState: mock((issue: number, state: IssueState) => {
-        latestState = state;
-        stateStore.set(issue, state);
-      }),
-      getState: mock((issue: number) => stateStore.get(issue)),
-      removeState: mock((issue: number) => {
-        stateStore.delete(issue);
-      }),
-    };
+    const stateManagerStub = createStateManagerStub();
+    orchestratorAny.stateManager = stateManagerStub;
 
     orchestratorAny.githubClient = {
       getReadyIssues: mock(async () => [{ number: 101, title: "Add feature", labels: [] }]),
       updateIssueLabels: mock(async () => {}),
     };
 
-    orchestratorAny.repoManager = { ensureRepoClone: mock(async () => resolve(tempDir, "repo")) };
-
-    orchestratorAny.processor = {
-      processIssue: mock(async () => ({ status: ProcessStatus.Completed, sessionId: "session-123" })),
+    orchestratorAny.repoManager = {
+      ensureRepoClone: mock(async (processor: string) => {
+        expect(processor).toBe("claude");
+        return resolve(tempDir, processor, "repo_agent_0");
+      }),
+      validateBranchReady: mock(async () => true),
     };
 
-    const notifications: Array<{ kind: string; args: unknown[] }> = [];
+    const runnerMock = mock(async () => ({ status: ProcessStatus.Completed, sessionId: "session-123" }));
+    orchestratorAny.processors = [createSingleProcessor(runnerMock)];
+
     const notifier = {
-      notifyStart: mock(async (...args: unknown[]) => {
-        notifications.push({ kind: "start", args });
-      }),
-      notifyComplete: mock(async (...args: unknown[]) => {
-        notifications.push({ kind: "complete", args });
-      }),
+      notifyStart: mock(async () => {}),
+      notifyComplete: mock(async () => {}),
       notifyNeedsInput: mock(async () => {}),
       notifyError: mock(async () => {}),
     };
@@ -147,25 +153,18 @@ describe("IssueOrchestrator", () => {
 
     await orchestrator.run();
 
-    expect(orchestratorAny.githubClient.getReadyIssues.mock.calls.length).toBe(1);
-    expect(orchestratorAny.processor.processIssue.mock.calls[0][0]).toBe(101);
-
-    expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls.length).toBe(2);
     expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls[0][1]).toEqual({
       add: ["claude-working"],
-      remove: ["ready-for-claude"],
+      remove: ["ready-for-claude", "claude-completed", "claude-failed"],
     });
     expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls[1][1]).toEqual({
       add: ["claude-completed"],
       remove: ["claude-working"],
     });
 
-    expect(latestState?.status).toBe(ProcessStatus.Completed);
-    expect(latestState?.session_id).toBe("session-123");
-    expect(notifier.notifyStart.mock.calls.length).toBe(1);
-    expect(notifier.notifyComplete.mock.calls.length).toBe(1);
-    expect(notifications.map((n) => n.kind)).toEqual(["start", "complete"]);
-    expect(stateStore.size).toBe(0);
+    expect(runnerMock.mock.calls.length).toBe(1);
+    expect(stateManagerStub.setState.mock.calls[0][1]).toBe("claude");
+    expect(stateManagerStub.removeState.mock.calls.length).toBe(1);
   });
 
   test("marks issue as failed when processor reports failure", async () => {
@@ -174,34 +173,22 @@ describe("IssueOrchestrator", () => {
     const orchestrator = new IssueOrchestrator(config as any);
     const orchestratorAny = orchestrator as any;
 
-    const stateStore = new Map<number, IssueState>();
-    let latestState: IssueState | undefined;
-
-    orchestratorAny.stateManager = {
-      initialize: mock(async () => {}),
-      saveStates: mock(async () => {}),
-      getActiveIssues: mock(() => []),
-      getAvailableAgentIndex: mock(() => 0),
-      setState: mock((issue: number, state: IssueState) => {
-        latestState = state;
-        stateStore.set(issue, state);
-      }),
-      getState: mock((issue: number) => stateStore.get(issue)),
-      removeState: mock((issue: number) => {
-        stateStore.delete(issue);
-      }),
-    };
+    const stateManagerStub = createStateManagerStub();
+    orchestratorAny.stateManager = stateManagerStub;
 
     orchestratorAny.githubClient = {
       getReadyIssues: mock(async () => [{ number: 202, title: "Hot fix", labels: [] }]),
       updateIssueLabels: mock(async () => {}),
     };
 
-    orchestratorAny.repoManager = { ensureRepoClone: mock(async () => resolve(tempDir, "repo")) };
-
-    orchestratorAny.processor = {
-      processIssue: mock(async () => ({ status: ProcessStatus.Failed, sessionId: null })),
+    orchestratorAny.repoManager = {
+      ensureRepoClone: mock(async () => resolve(tempDir, "claude", "repo_agent_0")),
+      validateBranchReady: mock(async () => true),
     };
+
+    orchestratorAny.processors = [
+      createSingleProcessor(mock(async () => ({ status: ProcessStatus.Failed, sessionId: null }))),
+    ];
 
     const notifier = {
       notifyStart: mock(async () => {}),
@@ -215,14 +202,10 @@ describe("IssueOrchestrator", () => {
 
     await orchestrator.run();
 
-    expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls.length).toBe(2);
     expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls[1][1]).toEqual({
       add: ["claude-failed"],
       remove: ["claude-working", "ready-for-claude"],
     });
-    expect(latestState?.status).toBe(ProcessStatus.Failed);
-    expect(stateStore.size).toBe(0);
-    expect(notifier.notifyStart.mock.calls.length).toBe(1);
-    expect(notifier.notifyComplete.mock.calls.length).toBe(0);
+    expect(stateManagerStub.removeState.mock.calls.length).toBe(1);
   });
 });

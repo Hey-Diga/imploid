@@ -2,6 +2,13 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, resolve } from "path";
 import { IssueState, ProcessStatus } from "./models";
 
+const ACTIVE_STATUSES = new Set<ProcessStatus | string>([
+  ProcessStatus.Running,
+  ProcessStatus.NeedsInput,
+  "running",
+  "needs_input",
+]);
+
 function resolveStatePath(stateFile: string): string {
   if (stateFile.startsWith("/")) {
     return stateFile;
@@ -9,9 +16,27 @@ function resolveStatePath(stateFile: string): string {
   return resolve(process.cwd(), stateFile);
 }
 
+function makeStateKey(issueNumber: number, processorName: string): string {
+  return `${issueNumber}:${processorName}`;
+}
+
+function parseStateKey(key: string, fallbackProcessor = "claude"): { issueNumber: number; processorName: string } {
+  if (key.includes(":")) {
+    const [rawIssue, rawProcessor] = key.split(":", 2);
+    const issueNumber = Number(rawIssue);
+    const processorName = rawProcessor || fallbackProcessor;
+    return { issueNumber, processorName };
+  }
+  return { issueNumber: Number(key), processorName: fallbackProcessor };
+}
+
+function isActive(state: IssueState): boolean {
+  return ACTIVE_STATUSES.has(state.status);
+}
+
 export class StateManager {
   private readonly stateFile: string;
-  private states: Map<number, IssueState> = new Map();
+  private states: Map<string, IssueState> = new Map();
 
   constructor(stateFile = "processing-state.json") {
     this.stateFile = resolveStatePath(stateFile);
@@ -22,13 +47,18 @@ export class StateManager {
       const content = await readFile(this.stateFile, "utf8");
       const raw = JSON.parse(content) as Record<string, any>;
       for (const [key, value] of Object.entries(raw)) {
-        const issueNumber = Number(key);
-        if (!Number.isNaN(issueNumber)) {
-          this.states.set(issueNumber, IssueState.fromJSON({
-            issue_number: issueNumber,
-            ...value,
-          }));
+        const inferredProcessor = typeof value?.processor_name === "string" ? value.processor_name : "claude";
+        const { issueNumber, processorName } = parseStateKey(key, inferredProcessor);
+        if (Number.isNaN(issueNumber)) {
+          continue;
         }
+        const state = IssueState.fromJSON({
+          issue_number: issueNumber,
+          processor_name: processorName,
+          ...value,
+        });
+        state.processor_name = processorName;
+        this.states.set(makeStateKey(issueNumber, processorName), state);
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -37,65 +67,64 @@ export class StateManager {
     }
   }
 
-  getState(issueNumber: number): IssueState | undefined {
-    return this.states.get(issueNumber);
+  getState(issueNumber: number, processorName: string): IssueState | undefined {
+    return this.states.get(makeStateKey(issueNumber, processorName));
   }
 
-  setState(issueNumber: number, state: IssueState): void {
-    this.states.set(issueNumber, state);
+  setState(issueNumber: number, processorName: string, state: IssueState): void {
+    state.processor_name = processorName;
+    this.states.set(makeStateKey(issueNumber, processorName), state);
   }
 
-  removeState(issueNumber: number): void {
-    this.states.delete(issueNumber);
+  removeState(issueNumber: number, processorName: string): void {
+    this.states.delete(makeStateKey(issueNumber, processorName));
   }
 
   async saveStates(): Promise<void> {
     const json: Record<string, any> = {};
-    for (const [issueNumber, state] of this.states.entries()) {
-      json[String(issueNumber)] = state.toJSON();
+    for (const [key, state] of this.states.entries()) {
+      json[key] = state.toJSON();
     }
 
     await mkdir(dirname(this.stateFile), { recursive: true });
     await writeFile(this.stateFile, JSON.stringify(json, null, 2), "utf8");
   }
 
-  getActiveIssues(): number[] {
-    return Array.from(this.states.entries())
-      .filter(([, state]) =>
-        state.status === ProcessStatus.Running || state.status === ProcessStatus.NeedsInput || state.status === "running" || state.status === "needs_input"
-      )
-      .map(([issueNumber]) => issueNumber);
+  getActiveStates(): IssueState[] {
+    return Array.from(this.states.values()).filter(isActive);
   }
 
-  getAvailableAgentIndex(maxConcurrent: number): number | undefined {
+  getActiveStatesByProcessor(processorName: string): IssueState[] {
+    return this.getActiveStates().filter((state) => state.processor_name === processorName);
+  }
+
+  getActiveIssueNumbersByProcessor(processorName: string): number[] {
+    const numbers = new Set<number>();
+    for (const state of this.getActiveStatesByProcessor(processorName)) {
+      numbers.add(state.issue_number);
+    }
+    return Array.from(numbers);
+  }
+
+  getAvailableAgentIndex(processorName: string, maxConcurrent: number): number | undefined {
     const usedAgents = new Set<number>();
-    for (const state of this.states.values()) {
-      const isActive =
-        state.status === ProcessStatus.Running ||
-        state.status === ProcessStatus.NeedsInput ||
-        state.status === "running" ||
-        state.status === "needs_input";
-      if (isActive && state.agent_index !== undefined && state.agent_index !== null) {
+    for (const state of this.getActiveStatesByProcessor(processorName)) {
+      if (state.agent_index !== undefined && state.agent_index !== null) {
         usedAgents.add(state.agent_index);
       }
     }
-
     for (let i = 0; i < maxConcurrent; i += 1) {
       if (!usedAgents.has(i)) {
         return i;
       }
     }
-
     return undefined;
   }
 
-  getAgentIssues(agentIndex: number): number[] {
-    return Array.from(this.states.entries())
-      .filter(([, state]) => state.agent_index === agentIndex)
-      .filter(([, state]) =>
-        state.status === ProcessStatus.Running || state.status === ProcessStatus.NeedsInput || state.status === "running" || state.status === "needs_input"
-      )
-      .map(([issueNumber]) => issueNumber);
+  getAgentIssues(processorName: string, agentIndex: number): number[] {
+    return this.getActiveStatesByProcessor(processorName)
+      .filter((state) => state.agent_index === agentIndex)
+      .map((state) => state.issue_number);
   }
 
   getStateFilePath(): string {

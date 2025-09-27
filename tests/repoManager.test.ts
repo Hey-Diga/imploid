@@ -36,10 +36,10 @@ describe("RepoManager", () => {
 
   const createStubConfig = (repoName = "owner/repo") => ({
     githubRepo: repoName,
-    getRepoPath(agentIndex: number, targetRepo?: string) {
+    getProcessorRepoPath(processorName: string, agentIndex: number, targetRepo?: string) {
       const actualRepo = targetRepo ?? repoName;
       const short = actualRepo.split("/").pop() ?? actualRepo;
-      return join(tempDir, short + `_agent_${agentIndex}`);
+      return join(tempDir, processorName, `${short}_agent_${agentIndex}`);
     },
   });
 
@@ -57,9 +57,9 @@ describe("RepoManager", () => {
     };
 
     const manager = new RepoManager(createStubConfig() as any);
-    const repoPath = await manager.ensureRepoClone(0);
+    const repoPath = await manager.ensureRepoClone("claude", 0);
 
-    expect(repoPath).toBe(join(tempDir, "repo_agent_0"));
+    expect(repoPath).toBe(join(tempDir, "claude", "repo_agent_0"));
     expect(commands[0]).toEqual({
       command: ["git", "clone", "git@github.com:owner/repo.git", "repo_agent_0"],
       cwd: dirname(repoPath),
@@ -74,7 +74,7 @@ describe("RepoManager", () => {
     const { RepoManager } = await import("../src/lib/repoManager");
     const commands: Array<{ command: string[]; cwd?: string }> = [];
 
-    const repoPath = join(tempDir, "repo_agent_1");
+    const repoPath = join(tempDir, "codex", "repo_agent_1");
     mkdirSync(repoPath, { recursive: true });
 
     runCommandImpl = async (command, options) => {
@@ -87,7 +87,7 @@ describe("RepoManager", () => {
     };
 
     const manager = new RepoManager(createStubConfig() as any);
-    await manager.ensureRepoClone(1);
+    await manager.ensureRepoClone("codex", 1);
 
     const executed = commands.map((entry) => entry.command.join(" "));
     expect(executed).toContain("git checkout main");

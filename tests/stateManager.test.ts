@@ -18,64 +18,68 @@ describe("StateManager", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  const createState = (issue: number, agent: number) =>
+  const createState = (issue: number, processor: string, agent: number) =>
     new IssueState({
       issue_number: issue,
+      processor_name: processor,
       status: ProcessStatus.Running,
-      branch: `issue-${issue}`,
+      branch: `issue-${issue}-${processor}`,
       start_time: new Date().toISOString(),
       agent_index: agent,
     });
 
-  test("persists and reloads states", async () => {
+  test("persists and reloads states per processor", async () => {
     const manager = new StateManager(statePath);
     await manager.initialize();
 
-    manager.setState(1, createState(1, 0));
-    manager.setState(2, createState(2, 1));
+    manager.setState(1, "claude", createState(1, "claude", 0));
+    manager.setState(1, "codex", createState(1, "codex", 1));
     await manager.saveStates();
 
     const reloaded = new StateManager(statePath);
     await reloaded.initialize();
 
-    expect(reloaded.getState(1)?.branch).toBe("issue-1");
-    expect(reloaded.getState(2)?.agent_index).toBe(1);
-    expect(reloaded.getActiveIssues()).toEqual([1, 2]);
+    expect(reloaded.getState(1, "claude")?.branch).toBe("issue-1-claude");
+    expect(reloaded.getState(1, "codex")?.agent_index).toBe(1);
+    expect(reloaded.getActiveIssueNumbersByProcessor("claude")).toEqual([1]);
+    expect(reloaded.getActiveIssueNumbersByProcessor("codex")).toEqual([1]);
   });
 
-  test("tracks available agent indices", async () => {
+  test("tracks available agent indices per processor", async () => {
     const manager = new StateManager(statePath);
     await manager.initialize();
 
-    manager.setState(10, createState(10, 0));
-    manager.setState(11, createState(11, 2));
+    manager.setState(10, "claude", createState(10, "claude", 0));
+    manager.setState(11, "claude", createState(11, "claude", 2));
+    manager.setState(10, "codex", createState(10, "codex", 0));
 
-    expect(manager.getAvailableAgentIndex(4)).toBe(1);
+    expect(manager.getAvailableAgentIndex("claude", 4)).toBe(1);
+    expect(manager.getAvailableAgentIndex("codex", 2)).toBe(1);
 
-    manager.removeState(10);
-    expect(manager.getAvailableAgentIndex(2)).toBe(0);
+    manager.removeState(10, "claude");
+    expect(manager.getAvailableAgentIndex("claude", 2)).toBe(0);
   });
 
-  test("treats legacy status strings as active when listing issues", async () => {
+  test("treats legacy status strings as active and filters by processor", async () => {
     const manager = new StateManager(statePath);
     await manager.initialize();
 
-    const make = (issue: number, status: ProcessStatus | string, agent: number) =>
+    const legacy = (issue: number, processor: string, status: ProcessStatus | string, agent: number) =>
       new IssueState({
         issue_number: issue,
+        processor_name: processor,
         status,
-        branch: `issue-${issue}`,
+        branch: `issue-${issue}-${processor}`,
         start_time: new Date().toISOString(),
         agent_index: agent,
       });
 
-    manager.setState(1, make(1, "running", 0));
-    manager.setState(2, make(2, ProcessStatus.NeedsInput, 0));
-    manager.setState(3, make(3, ProcessStatus.Completed, 0));
-    manager.setState(4, make(4, "needs_input", 1));
+    manager.setState(1, "claude", legacy(1, "claude", "running", 0));
+    manager.setState(2, "claude", legacy(2, "claude", ProcessStatus.NeedsInput, 0));
+    manager.setState(3, "claude", legacy(3, "claude", ProcessStatus.Completed, 0));
+    manager.setState(4, "codex", legacy(4, "codex", "needs_input", 1));
 
-    expect(manager.getActiveIssues().sort()).toEqual([1, 2, 4]);
-    expect(manager.getAgentIssues(0)).toEqual([1, 2]);
-    expect(manager.getAgentIssues(1)).toEqual([4]);
+    expect(manager.getActiveIssueNumbersByProcessor("claude").sort()).toEqual([1, 2]);
+    expect(manager.getAgentIssues("codex", 1)).toEqual([4]);
   });
 });

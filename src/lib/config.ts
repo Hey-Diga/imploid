@@ -631,13 +631,13 @@ export class Config {
     return this.githubRepos.find((repo) => repo.name === repoName);
   }
 
-  getRepoPath(agentIndex: number, repoName?: string): string {
+  getProcessorRepoPath(processorName: string, agentIndex: number, repoName?: string): string {
     const selectedRepo = repoName ? this.getRepoConfig(repoName) : this.githubRepos[0];
     if (!selectedRepo) {
       throw new Error(`Repository ${repoName ?? "<default>"} not found in configuration`);
     }
 
-    const basePath = resolve(expandHomePath(selectedRepo.base_repo_path));
+    const basePath = resolve(expandHomePath(DEFAULT_REPOS_DIR), processorName);
     const repoShortName = selectedRepo.name.split("/").pop() ?? selectedRepo.name;
     return resolve(basePath, `${repoShortName}_agent_${agentIndex}`);
   }

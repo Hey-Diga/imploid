@@ -66,8 +66,9 @@ describe("CodexProcessor", () => {
   const makeStateManager = (issueNumber: number) => {
     const state = new IssueState({
       issue_number: issueNumber,
+      processor_name: "codex",
       status: ProcessStatus.Running,
-      branch: `issue-${issueNumber}`,
+      branch: `issue-${issueNumber}-codex`,
       start_time: new Date().toISOString(),
     });
     const store = new Map<number, IssueState>([[issueNumber, state]]);
@@ -85,7 +86,10 @@ describe("CodexProcessor", () => {
   };
 
   const makeRepoManager = (repoPath: string) => ({
-    ensureRepoClone: mock(async () => repoPath),
+    ensureRepoClone: mock(async (processorName: string) => {
+      expect(processorName).toBe("codex");
+      return repoPath;
+    }),
     validateBranchReady: mock(async () => true),
   });
 
@@ -103,7 +107,7 @@ describe("CodexProcessor", () => {
         return { code: 0, stdout: "", stderr: "" };
       }
       if (command[1] === "branch") {
-        return { code: 0, stdout: "issue-42\n", stderr: "" };
+        return { code: 0, stdout: "issue-42-codex\n", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -138,11 +142,11 @@ describe("CodexProcessor", () => {
       if (command[1] === "show-ref") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "checkout" && command[2] === "issue-101") {
+      if (command[1] === "checkout" && command[2] === "issue-101-codex") {
         return { code: 0, stdout: "", stderr: "" };
       }
       if (command[1] === "branch") {
-        return { code: 0, stdout: "issue-101\n", stderr: "" };
+        return { code: 0, stdout: "issue-101-codex\n", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -174,11 +178,11 @@ describe("CodexProcessor", () => {
       if (command[1] === "show-ref") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "checkout" && command[2] === "issue-11") {
+      if (command[1] === "checkout" && command[2] === "issue-11-codex") {
         return { code: 0, stdout: "", stderr: "" };
       }
       if (command[1] === "branch") {
-        return { code: 0, stdout: "issue-11\n", stderr: "" };
+        return { code: 0, stdout: "issue-11-codex\n", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };

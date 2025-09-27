@@ -276,8 +276,10 @@ describe("Config.loadOrCreate", () => {
     expect(config.baseRepoPath).toBe("~/legacy-path");
     expect(config.maxConcurrent).toBe(3);
 
-    const expectedBase = resolve(process.env.HOME ?? "", "legacy-path");
-    expect(config.getRepoPath(2)).toBe(resolve(expectedBase, "legacy-repo_agent_2"));
+    const expectedBase = resolve(process.env.HOME ?? "", ".issue-orchestrator/repos");
+    expect(config.getProcessorRepoPath("claude", 2, "owner/legacy-repo")).toBe(
+      resolve(expectedBase, "claude", "legacy-repo_agent_2")
+    );
   });
 
   test("throws descriptive error when configuration is missing in non-interactive mode", async () => {

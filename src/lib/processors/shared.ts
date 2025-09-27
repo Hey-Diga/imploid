@@ -7,12 +7,13 @@ export type ProcessorNotifier = SlackNotifier | TelegramNotifier;
 
 export async function prepareIssueWorkspace(
   repoManager: RepoManager,
+  processorName: string,
   issueNumber: number,
   agentIndex: number,
   repoName?: string
 ): Promise<{ repoPath: string; branchName: string }> {
-  const repoPath = await repoManager.ensureRepoClone(agentIndex, repoName);
-  const branchName = `issue-${issueNumber}`;
+  const repoPath = await repoManager.ensureRepoClone(processorName, agentIndex, repoName);
+  const branchName = `issue-${issueNumber}-${processorName}`;
 
   const branchCheck = await runCommand(["git", "show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], {
     cwd: repoPath,
@@ -36,11 +37,6 @@ export async function prepareIssueWorkspace(
 
   if (currentBranch.stdout.trim() !== branchName) {
     throw new Error(`Expected to be on branch ${branchName}, but currently on ${currentBranch.stdout.trim()}`);
-  }
-
-  const ready = await repoManager.validateBranchReady(repoPath, branchName);
-  if (!ready) {
-    throw new Error(`Branch ${branchName} is not ready for processing`);
   }
 
   return { repoPath, branchName };

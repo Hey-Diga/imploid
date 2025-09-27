@@ -22,6 +22,7 @@ export interface IssueStateData {
   start_time: string;
   agent_index?: number | null;
   repo_name?: string | null;
+  processor_name?: string | null;
   end_time?: string | null;
   last_output?: string | null;
   error?: string | null;
@@ -35,6 +36,7 @@ export class IssueState implements IssueStateData {
   start_time: string;
   agent_index?: number | null;
   repo_name?: string | null;
+  processor_name?: string | null;
   end_time?: string | null;
   last_output?: string | null;
   error?: string | null;
@@ -47,6 +49,7 @@ export class IssueState implements IssueStateData {
     this.start_time = data.start_time;
     this.agent_index = data.agent_index;
     this.repo_name = data.repo_name;
+    this.processor_name = data.processor_name ?? null;
     this.end_time = data.end_time;
     this.last_output = data.last_output;
     this.error = data.error;
@@ -67,6 +70,7 @@ export class IssueState implements IssueStateData {
     if (this.session_id) json.session_id = this.session_id;
     if (this.agent_index !== undefined) json.agent_index = this.agent_index;
     if (this.repo_name) json.repo_name = this.repo_name;
+    if (this.processor_name) json.processor_name = this.processor_name;
     if (this.end_time) json.end_time = this.end_time;
     if (this.last_output) json.last_output = this.last_output;
     if (this.error) json.error = this.error;

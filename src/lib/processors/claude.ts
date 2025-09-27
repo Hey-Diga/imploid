@@ -2,14 +2,14 @@ import { Config } from "../config";
 import { RepoManager } from "../repoManager";
 import { ProcessStatus } from "../models";
 import { StateManager } from "../stateManager";
-import { runCommand, spawnProcess } from "../../utils/process";
-
-
+import { spawnProcess } from "../../utils/process";
 
 import { buildIssuePrompt } from "./prompt";
 import { ProcessorNotifier, prepareIssueWorkspace, broadcastProcessorError } from "./shared";
 
 export type Notifier = ProcessorNotifier;
+
+const PROCESSOR_NAME = "claude";
 
 export class ClaudeProcessor {
   private readonly config: Config;
@@ -28,7 +28,7 @@ export class ClaudeProcessor {
     stateManager: StateManager,
     repoName?: string
   ): Promise<{ status: ProcessStatus; sessionId?: string | null }> {
-    const { repoPath } = await prepareIssueWorkspace(this.repoManager, issueNumber, agentIndex, repoName);
+    const { repoPath } = await prepareIssueWorkspace(this.repoManager, PROCESSOR_NAME, issueNumber, agentIndex, repoName);
 
     const commandPrompt = buildIssuePrompt(issueNumber);
 

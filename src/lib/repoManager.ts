@@ -10,16 +10,16 @@ export class RepoManager {
     this.config = config;
   }
 
-  async ensureRepoClone(agentIndex: number, repoName?: string): Promise<string> {
-    const repoPath = this.config.getRepoPath(agentIndex, repoName);
+  async ensureRepoClone(processorName: string, agentIndex: number, repoName?: string): Promise<string> {
+    const repoPath = this.config.getProcessorRepoPath(processorName, agentIndex, repoName);
 
     const exists = await stat(repoPath).then(() => true).catch(() => false);
 
     if (exists) {
-      console.info(`Pulling latest changes for agent ${agentIndex} at ${repoPath}`);
+      console.info(`[${processorName}] Pulling latest changes for agent ${agentIndex} at ${repoPath}`);
       await this.pullLatest(repoPath);
     } else {
-      console.info(`Cloning repository for agent ${agentIndex} to ${repoPath}`);
+      console.info(`[${processorName}] Cloning repository for agent ${agentIndex} to ${repoPath}`);
       await this.cloneRepo(repoPath, repoName ?? this.config.githubRepo);
     }
 
@@ -46,9 +46,19 @@ export class RepoManager {
   }
 
   async pullLatest(repoPath: string): Promise<void> {
-    const checkout = await runCommand(["git", "checkout", "main"], { cwd: repoPath });
-    if (checkout.code !== 0) {
-      throw new Error(`Failed to checkout main branch: ${checkout.stderr}`);
+    const candidates = ["main", "master"];
+    let checkedOutBranch: string | undefined;
+
+    for (const branch of candidates) {
+      const checkout = await runCommand(["git", "checkout", branch], { cwd: repoPath });
+      if (checkout.code === 0) {
+        checkedOutBranch = branch;
+        break;
+      }
+    }
+
+    if (!checkedOutBranch) {
+      throw new Error("Failed to checkout main or master branch");
     }
 
     const fetchResult = await runCommand(["git", "fetch", "origin"], { cwd: repoPath });
@@ -56,7 +66,7 @@ export class RepoManager {
       throw new Error(`Failed to fetch latest changes: ${fetchResult.stderr}`);
     }
 
-    const pullResult = await runCommand(["git", "pull", "origin", "main"], { cwd: repoPath });
+    const pullResult = await runCommand(["git", "pull", "origin", checkedOutBranch], { cwd: repoPath });
     if (pullResult.code !== 0) {
       throw new Error(`Failed to pull latest changes: ${pullResult.stderr}`);
     }
