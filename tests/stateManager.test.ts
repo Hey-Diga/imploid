@@ -55,4 +55,27 @@ describe("StateManager", () => {
     manager.removeState(10);
     expect(manager.getAvailableAgentIndex(2)).toBe(0);
   });
+
+  test("treats legacy status strings as active when listing issues", async () => {
+    const manager = new StateManager(statePath);
+    await manager.initialize();
+
+    const make = (issue: number, status: ProcessStatus | string, agent: number) =>
+      new IssueState({
+        issue_number: issue,
+        status,
+        branch: `issue-${issue}`,
+        start_time: new Date().toISOString(),
+        agent_index: agent,
+      });
+
+    manager.setState(1, make(1, "running", 0));
+    manager.setState(2, make(2, ProcessStatus.NeedsInput, 0));
+    manager.setState(3, make(3, ProcessStatus.Completed, 0));
+    manager.setState(4, make(4, "needs_input", 1));
+
+    expect(manager.getActiveIssues().sort()).toEqual([1, 2, 4]);
+    expect(manager.getAgentIssues(0)).toEqual([1, 2]);
+    expect(manager.getAgentIssues(1)).toEqual([4]);
+  });
 });

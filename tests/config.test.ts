@@ -98,4 +98,41 @@ describe("Config.loadOrCreate", () => {
     expect(config.claudeTimeout).toBe(7200);
     expect(config.claudeCheckInterval).toBe(12);
   });
+
+  test("derives repository list from legacy single repo fields", async () => {
+    const configPath = join(tempDir, "config.json");
+    const payload = {
+      github: {
+        token: "ghp_single",
+        repo: "owner/legacy-repo",
+        base_repo_path: "~/legacy-path",
+      },
+      claude: {
+        timeout_seconds: 1000,
+        check_interval: 20,
+        path: "claude",
+      },
+    };
+    writeFileSync(configPath, JSON.stringify(payload, null, 2));
+
+    const { Config } = await import("../src/lib/config");
+    const config = await Config.loadOrCreate(configPath);
+
+    expect(config.githubRepos).toHaveLength(1);
+    expect(config.githubRepos[0].name).toBe("owner/legacy-repo");
+    expect(config.baseRepoPath).toBe("~/legacy-path");
+    expect(config.maxConcurrent).toBe(3);
+
+    const expectedBase = resolve(process.env.HOME ?? "", "legacy-path");
+    expect(config.getRepoPath(2)).toBe(resolve(expectedBase, "legacy-repo_agent_2"));
+  });
+
+  test("throws descriptive error when configuration is missing in non-interactive mode", async () => {
+    const configPath = join(tempDir, "missing.json");
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+    Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+
+    const { Config } = await import("../src/lib/config");
+    await expect(Config.loadOrCreate(configPath)).rejects.toThrow("Configuration file not found");
+  });
 });
