@@ -45,21 +45,40 @@ export class RepoManager {
     }
   }
 
-  async pullLatest(repoPath: string): Promise<void> {
+  private async checkoutDefaultBranch(repoPath: string): Promise<string> {
     const candidates = ["main", "master"];
-    let checkedOutBranch: string | undefined;
-
     for (const branch of candidates) {
       const checkout = await runCommand(["git", "checkout", branch], { cwd: repoPath });
       if (checkout.code === 0) {
-        checkedOutBranch = branch;
-        break;
+        return branch;
+      }
+    }
+    throw new Error("Failed to checkout main or master branch");
+  }
+
+  private async resetToRemote(repoPath: string, branch: string): Promise<void> {
+    const reset = await runCommand(["git", "reset", "--hard", `origin/${branch}`], { cwd: repoPath });
+    if (reset.code !== 0) {
+      const fallback = await runCommand(["git", "reset", "--hard"], { cwd: repoPath });
+      if (fallback.code !== 0) {
+        throw new Error(`Failed to reset branch ${branch}: ${reset.stderr || fallback.stderr}`);
       }
     }
 
-    if (!checkedOutBranch) {
-      throw new Error("Failed to checkout main or master branch");
+    const cleanResult = await runCommand(["git", "clean", "-fd"], { cwd: repoPath });
+    if (cleanResult.code !== 0) {
+      throw new Error(`Failed to clean repository: ${cleanResult.stderr}`);
     }
+  }
+
+  async prepareDefaultBranch(repoPath: string): Promise<string> {
+    const branch = await this.checkoutDefaultBranch(repoPath);
+    await this.resetToRemote(repoPath, branch);
+    return branch;
+  }
+
+  async pullLatest(repoPath: string): Promise<void> {
+    const checkedOutBranch = await this.checkoutDefaultBranch(repoPath);
 
     const fetchResult = await runCommand(["git", "fetch", "origin"], { cwd: repoPath });
     if (fetchResult.code !== 0) {
@@ -90,26 +109,21 @@ export class RepoManager {
       throw new Error(`Failed to check git status: ${status.stderr}`);
     }
     if (status.stdout.trim().length) {
-      console.warn(`Repository has uncommitted changes: ${status.stdout.trim()}`);
-    }
-
-    const branch = await runCommand(["git", "branch", "--show-current"], { cwd: repoPath });
-    if (branch.code !== 0) {
-      throw new Error(`Failed to get current branch: ${branch.stderr}`);
-    }
-
-    const current = branch.stdout.trim();
-    if (!current) {
-      let checkout = await runCommand(["git", "checkout", "main"], { cwd: repoPath });
-      if (checkout.code !== 0) {
-        checkout = await runCommand(["git", "checkout", "master"], { cwd: repoPath });
-        if (checkout.code !== 0) {
-          throw new Error("Failed to checkout main or master branch");
-        }
-        console.info("Switched to master branch (legacy)");
-      } else {
-        console.info("Switched to main branch");
+      console.warn(`Repository has uncommitted changes, discarding them: ${status.stdout.trim()}`);
+      const resetResult = await runCommand(["git", "reset", "--hard"], { cwd: repoPath });
+      if (resetResult.code !== 0) {
+        throw new Error(`Failed to reset repository: ${resetResult.stderr}`);
       }
+      const cleanResult = await runCommand(["git", "clean", "-fd"], { cwd: repoPath });
+      if (cleanResult.code !== 0) {
+        throw new Error(`Failed to clean repository: ${cleanResult.stderr}`);
+      }
+    }
+
+    await this.checkoutDefaultBranch(repoPath);
+    const currentBranch = await runCommand(["git", "branch", "--show-current"], { cwd: repoPath });
+    if (currentBranch.code !== 0 || !currentBranch.stdout.trim()) {
+      throw new Error(`Failed to confirm current branch: ${currentBranch.stderr}`);
     }
   }
 

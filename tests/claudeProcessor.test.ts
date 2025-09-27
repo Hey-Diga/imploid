@@ -92,6 +92,7 @@ describe("ClaudeProcessor", () => {
       expect(processorName).toBe("claude");
       return repoPath;
     }),
+    prepareDefaultBranch: mock(async () => "main"),
     validateBranchReady: mock(async () => true),
   });
 
@@ -106,14 +107,11 @@ describe("ClaudeProcessor", () => {
     const commands: string[] = [];
     runCommandImpl = async (command) => {
       commands.push(command.join(" "));
-      if (command[1] === "show-ref") {
-        return { code: 1, stdout: "", stderr: "" };
-      }
-      if (command[1] === "checkout" && command[2] === "-b") {
+      if (command[1] === "checkout" && command[2] === "-B") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "branch") {
-        return { code: 0, stdout: `issue-${issueNumber}-claude\n`, stderr: "" };
+      if (command[1] === "status") {
+        return { code: 0, stdout: "", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -133,9 +131,9 @@ describe("ClaudeProcessor", () => {
     const result = await processor.processIssue(issueNumber, 0, stateManager as any, "owner/repo");
 
     expect(result).toEqual({ status: ProcessStatus.Completed, sessionId: `sess-${issueNumber}` });
-    expect(commands).toContain("git show-ref --verify --quiet refs/heads/issue-321-claude");
-    expect(commands).toContain("git checkout -b issue-321-claude");
-    expect(commands).toContain("git branch --show-current");
+    expect(repoManager.prepareDefaultBranch.mock.calls[0][0]).toBe(repoPath);
+    expect(commands).toContain("git checkout -B issue-321-claude");
+    expect(commands).toContain("git status --porcelain");
     expect(repoManager.ensureRepoClone.mock.calls[0][0]).toBe("claude");
     expect(repoManager.ensureRepoClone.mock.calls[0][1]).toBe(0);
     expect(repoManager.ensureRepoClone.mock.calls[0][2]).toBe("owner/repo");
@@ -152,14 +150,11 @@ describe("ClaudeProcessor", () => {
     const notifier = { notifyError: mock(async () => {}) };
 
     runCommandImpl = async (command) => {
-      if (command[1] === "show-ref") {
+      if (command[1] === "checkout" && command[2] === "-B") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "checkout" && command[2] === "issue-99") {
+      if (command[1] === "status") {
         return { code: 0, stdout: "", stderr: "" };
-      }
-      if (command[1] === "branch") {
-        return { code: 0, stdout: `issue-${issueNumber}-claude\n`, stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -191,14 +186,11 @@ describe("ClaudeProcessor", () => {
     const notifier = { notifyError: mock(async () => {}) };
 
     runCommandImpl = async (command) => {
-      if (command[1] === "show-ref") {
+      if (command[1] === "checkout" && command[2] === "-B") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "checkout" && command[2] === "issue-7") {
+      if (command[1] === "status") {
         return { code: 0, stdout: "", stderr: "" };
-      }
-      if (command[1] === "branch") {
-        return { code: 0, stdout: `issue-${issueNumber}-claude\n`, stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };

@@ -50,6 +50,12 @@ describe("RepoManager", () => {
     runCommandImpl = async (command, options) => {
       commands.push({ command, cwd: options?.cwd });
       const key = command.join(" ");
+      if (key === "git status --porcelain") {
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (key === "git checkout main") {
+        return { code: 0, stdout: "", stderr: "" };
+      }
       if (key === "git branch --show-current") {
         return { code: 0, stdout: "main\n", stderr: "" };
       }
@@ -66,6 +72,9 @@ describe("RepoManager", () => {
     });
 
     const executed = commands.map((entry) => entry.command.join(" "));
+    expect(executed).toContain("git status --porcelain");
+    expect(executed).toContain("git checkout main");
+    expect(executed).toContain("git branch --show-current");
     expect(executed).toContain("chmod +x setup.sh");
     expect(executed).toContain("./setup.sh");
   });
@@ -80,8 +89,14 @@ describe("RepoManager", () => {
     runCommandImpl = async (command, options) => {
       commands.push({ command, cwd: options?.cwd });
       const key = command.join(" ");
-      if (key === "git branch --show-current") {
+      if (key === "git status --porcelain") {
         return { code: 0, stdout: "", stderr: "" };
+      }
+      if (key === "git checkout main") {
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      if (key === "git branch --show-current") {
+        return { code: 0, stdout: "main\n", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -90,9 +105,10 @@ describe("RepoManager", () => {
     await manager.ensureRepoClone("codex", 1);
 
     const executed = commands.map((entry) => entry.command.join(" "));
-    expect(executed).toContain("git checkout main");
+    expect(executed.filter((cmd) => cmd === "git checkout main").length).toBeGreaterThanOrEqual(2);
     expect(executed).toContain("git fetch origin");
     expect(executed).toContain("git pull origin main");
+    expect(executed).toContain("git status --porcelain");
   });
 
   test("validateBranchReady enforces branch existence and cleanliness", async () => {

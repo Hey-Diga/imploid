@@ -90,6 +90,7 @@ describe("CodexProcessor", () => {
       expect(processorName).toBe("codex");
       return repoPath;
     }),
+    prepareDefaultBranch: mock(async () => "main"),
     validateBranchReady: mock(async () => true),
   });
 
@@ -100,14 +101,11 @@ describe("CodexProcessor", () => {
     const notifier = { notifyError: mock(async () => {}) };
 
     runCommandImpl = async (command) => {
-      if (command[1] === "show-ref") {
-        return { code: 1, stdout: "", stderr: "" };
-      }
-      if (command[1] === "checkout" && command[2] === "-b") {
+      if (command[1] === "checkout" && command[2] === "-B") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "branch") {
-        return { code: 0, stdout: "issue-42-codex\n", stderr: "" };
+      if (command[1] === "status") {
+        return { code: 0, stdout: "", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -129,6 +127,10 @@ describe("CodexProcessor", () => {
     expect(spawnArgs[0]).toBe("/usr/local/bin/codex");
     expect(spawnArgs).toContain("--full-auto");
     expect(spawnArgs).toContain("--prompt");
+    const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
+    expect(commands).toContain("git checkout -B issue-42-codex");
+    expect(commands).toContain("git status --porcelain");
+    expect(repoManager.prepareDefaultBranch.mock.calls[0][0]).toBe("/tmp/repo");
     expect(notifier.notifyError.mock.calls.length).toBe(0);
   });
 
@@ -139,14 +141,11 @@ describe("CodexProcessor", () => {
     const notifier = { notifyError: mock(async () => {}) };
 
     runCommandImpl = async (command) => {
-      if (command[1] === "show-ref") {
+      if (command[1] === "checkout" && command[2] === "-B") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "checkout" && command[2] === "issue-101-codex") {
+      if (command[1] === "status") {
         return { code: 0, stdout: "", stderr: "" };
-      }
-      if (command[1] === "branch") {
-        return { code: 0, stdout: "issue-101-codex\n", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -164,6 +163,9 @@ describe("CodexProcessor", () => {
     const result = await processor.processIssue(101, 1, stateManager as any);
 
     expect(result.status).toBe(ProcessStatus.Failed);
+    const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
+    expect(commands).toContain("git checkout -B issue-101-codex");
+    expect(commands).toContain("git status --porcelain");
     expect(notifier.notifyError.mock.calls.length).toBe(1);
     expect(notifier.notifyError.mock.calls[0][1]).toContain("failure");
   });
@@ -175,14 +177,11 @@ describe("CodexProcessor", () => {
     const notifier = { notifyError: mock(async () => {}) };
 
     runCommandImpl = async (command) => {
-      if (command[1] === "show-ref") {
+      if (command[1] === "checkout" && command[2] === "-B") {
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (command[1] === "checkout" && command[2] === "issue-11-codex") {
+      if (command[1] === "status") {
         return { code: 0, stdout: "", stderr: "" };
-      }
-      if (command[1] === "branch") {
-        return { code: 0, stdout: "issue-11-codex\n", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
     };
@@ -204,6 +203,9 @@ describe("CodexProcessor", () => {
     const result = await processor.processIssue(11, 0, stateManager as any);
 
     expect(result.status).toBe(ProcessStatus.Failed);
+    const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
+    expect(commands).toContain("git checkout -B issue-11-codex");
+    expect(commands).toContain("git status --porcelain");
     expect(killed).toBe(true);
     expect(notifier.notifyError.mock.calls.length).toBe(1);
   });

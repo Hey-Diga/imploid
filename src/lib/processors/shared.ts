@@ -15,28 +15,23 @@ export async function prepareIssueWorkspace(
   const repoPath = await repoManager.ensureRepoClone(processorName, agentIndex, repoName);
   const branchName = `issue-${issueNumber}-${processorName}`;
 
-  const branchCheck = await runCommand(["git", "show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], {
-    cwd: repoPath,
-  });
-  if (branchCheck.code === 0) {
-    const checkout = await runCommand(["git", "checkout", branchName], { cwd: repoPath });
-    if (checkout.code !== 0) {
-      throw new Error(`Failed to checkout branch: ${checkout.stderr}`);
-    }
-  } else {
-    const create = await runCommand(["git", "checkout", "-b", branchName], { cwd: repoPath });
-    if (create.code !== 0) {
-      throw new Error(`Failed to create branch: ${create.stderr}`);
-    }
+  const baseBranch = await repoManager.prepareDefaultBranch(repoPath);
+  console.info(
+    `[${processorName}] Preparing issue branch ${branchName} from ${baseBranch} for agent ${agentIndex} at ${repoPath}`
+  );
+
+  const checkoutResult = await runCommand(["git", "checkout", "-B", branchName], { cwd: repoPath });
+  if (checkoutResult.code !== 0) {
+    throw new Error(`Failed to create branch ${branchName}: ${checkoutResult.stderr}`);
   }
 
-  const currentBranch = await runCommand(["git", "branch", "--show-current"], { cwd: repoPath });
-  if (currentBranch.code !== 0) {
-    throw new Error(`Failed to get current branch: ${currentBranch.stderr}`);
+  const statusResult = await runCommand(["git", "status", "--porcelain"], { cwd: repoPath });
+  if (statusResult.code !== 0) {
+    throw new Error(`Failed to verify repository status: ${statusResult.stderr}`);
   }
 
-  if (currentBranch.stdout.trim() !== branchName) {
-    throw new Error(`Expected to be on branch ${branchName}, but currently on ${currentBranch.stdout.trim()}`);
+  if (statusResult.stdout.trim().length) {
+    throw new Error(`Repository is not clean after preparing branch ${branchName}: ${statusResult.stdout.trim()}`);
   }
 
   return { repoPath, branchName };
