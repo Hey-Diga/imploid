@@ -2,25 +2,62 @@ import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
-import readline from "readline/promises";
+const spawnSyncMock = mock(() => ({ status: 0, stdout: "/usr/local/bin/claude\n", stderr: "" }));
+
+let promptResponses: Array<Record<string, unknown>> = [];
+
+const createPromptImplementation = () =>
+  async (questions: any) => {
+    const qArray = Array.isArray(questions) ? questions : [questions];
+    const response = promptResponses.shift() ?? {};
+    const result: Record<string, unknown> = {};
+    for (const question of qArray) {
+      const key = question.name as string;
+      if (Object.prototype.hasOwnProperty.call(response, key)) {
+        result[key] = (response as any)[key];
+      } else {
+        result[key] = undefined;
+      }
+    }
+    return result;
+  };
+
+const promptMock = mock(createPromptImplementation());
+
+mock.module("child_process", () => ({
+  spawnSync: spawnSyncMock,
+}));
+
+mock.module("inquirer", () => ({
+  default: {
+    prompt: promptMock,
+  },
+}));
 
 describe("Config.loadOrCreate", () => {
   let tempDir: string;
   let originalCwd: string;
-  const originalCreateInterface = readline.createInterface;
   const originalStdinTTY = process.stdin.isTTY;
   const originalStdoutTTY = process.stdout.isTTY;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "config-test-"));
     originalCwd = process.cwd();
     process.chdir(tempDir);
+
+    promptResponses = [];
+    promptMock.mockReset();
+    promptMock.mockImplementation(createPromptImplementation());
+
+    spawnSyncMock.mockReset();
+    spawnSyncMock.mockImplementation(() => ({ status: 0, stdout: "/usr/local/bin/claude\n", stderr: "" }));
   });
 
   afterEach(() => {
-    readline.createInterface = originalCreateInterface as any;
     Object.defineProperty(process.stdin, "isTTY", { value: originalStdinTTY, configurable: true });
     Object.defineProperty(process.stdout, "isTTY", { value: originalStdoutTTY, configurable: true });
+    global.fetch = originalFetch;
     process.chdir(originalCwd);
     rmSync(tempDir, { recursive: true, force: true });
   });
@@ -59,27 +96,38 @@ describe("Config.loadOrCreate", () => {
 
   test("runs interactive wizard when config is missing", async () => {
     const configPath = join(tempDir, "config.json");
-    const answers = [
-      "ghp_wizard_token", // github token
-      "1", // repo count
-      "owner/sample-repo", // repo name
-      "~/worktrees", // base path
-      "2", // max concurrent
-      "n", // telegram disabled
-      "y", // slack enabled
-      "xoxb-test-token", // slack token
-      "C123456", // slack channel
-      "", // claude path (accept default)
-      "7200", // timeout
-      "12", // check interval
-    ];
+    promptResponses.push(
+      { githubToken: "ghp_wizard_token" },
+      { organization: "__personal__" },
+      { repositories: ["owner/sample-repo"] },
+      { baseDir: "~/worktrees" },
+      { maxConcurrent: "2" },
+      { configureTelegram: false },
+      { configureSlack: true },
+      { slackBotToken: "xoxb-test-token" },
+      { slackChannelId: "C123456" },
+      { claudePath: "/usr/local/bin/claude" },
+      { claudeTimeout: "7200" },
+      { claudeCheckInterval: "12" }
+    );
 
-    const fakeInterface = {
-      question: mock(async () => answers.shift() ?? ""),
-      close: mock(() => {}),
-    };
+    global.fetch = mock(async (input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/user/orgs")) {
+        return new Response(JSON.stringify([{ login: "owner" }]), { status: 200 });
+      }
+      if (url.includes("/user/repos")) {
+        return new Response(
+          JSON.stringify([
+            { full_name: "owner/sample-repo" },
+            { full_name: "owner/second-repo" },
+          ]),
+          { status: 200 }
+        );
+      }
+      return new Response("[]", { status: 200 });
+    }) as any;
 
-    readline.createInterface = (() => fakeInterface) as any;
     Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
     Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
 
@@ -94,7 +142,7 @@ describe("Config.loadOrCreate", () => {
     expect(config.slackBotToken).toBe("xoxb-test-token");
     expect(config.slackChannelId).toBe("C123456");
     expect(config.telegramBotToken).toBe("");
-    expect(config.claudePath).toBe("claude");
+    expect(config.claudePath).toBe("/usr/local/bin/claude");
     expect(config.claudeTimeout).toBe(7200);
     expect(config.claudeCheckInterval).toBe(12);
   });

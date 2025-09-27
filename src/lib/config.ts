@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import readline from "readline/promises";
-import { stdin as input, stdout as output } from "process";
+import { spawnSync } from "child_process";
+import inquirer from "inquirer";
 
 export interface GitHubRepoConfig {
   name: string;
@@ -55,6 +55,150 @@ function resolveConfigPath(configPath: string): string {
   return resolve(libDir, "..", expanded);
 }
 
+interface GitHubRepoSummary {
+  full_name: string;
+}
+
+async function fetchAvailableRepos(token: string): Promise<GitHubRepoSummary[]> {
+  const results: GitHubRepoSummary[] = [];
+  let page = 1;
+
+  while (page <= 5) {
+    const response = await fetch(`https://api.github.com/user/repos?per_page=100&page=${page}`, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API responded with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as Array<{ full_name?: string }>;
+    const pageRepos = payload.filter((repo) => typeof repo.full_name === "string").map((repo) => ({
+      full_name: repo.full_name as string,
+    }));
+
+    results.push(...pageRepos);
+
+    if (pageRepos.length < 100) {
+      break;
+    }
+    page += 1;
+  }
+
+  return results;
+}
+
+async function fetchUserOrganizations(token: string): Promise<string[]> {
+  const organizations: string[] = [];
+  let page = 1;
+
+  while (page <= 5) {
+    const response = await fetch(`https://api.github.com/user/orgs?per_page=100&page=${page}`, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API responded with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as Array<{ login?: string }>;
+    const pageOrgs = payload
+      .map((org) => org.login)
+      .filter((login): login is string => typeof login === "string" && login.length > 0);
+
+    organizations.push(...pageOrgs);
+
+    if (pageOrgs.length < 100) {
+      break;
+    }
+    page += 1;
+  }
+
+  return Array.from(new Set(organizations));
+}
+
+async function fetchOrgRepos(token: string, organization: string): Promise<GitHubRepoSummary[]> {
+  const results: GitHubRepoSummary[] = [];
+  let page = 1;
+
+  while (page <= 5) {
+    const response = await fetch(
+      `https://api.github.com/orgs/${organization}/repos?per_page=100&page=${page}&type=all`,
+      {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub API responded with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as Array<{ full_name?: string }>;
+    const pageRepos = payload.filter((repo) => typeof repo.full_name === "string").map((repo) => ({
+      full_name: repo.full_name as string,
+    }));
+
+    results.push(...pageRepos);
+
+    if (pageRepos.length < 100) {
+      break;
+    }
+    page += 1;
+  }
+
+  return results;
+}
+
+async function promptManualRepositories(requireAtLeastOne: boolean): Promise<string[]> {
+  const repositories: string[] = [];
+
+  while (true) {
+    const message = repositories.length
+      ? "Add another repository (owner/repo) [leave blank to finish]"
+      : "Repository full name (owner/repo)";
+
+    const { repo } = await inquirer.prompt<{ repo: string }>([
+      {
+        type: "input",
+        name: "repo",
+        message,
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+
+    if (!repo) {
+      if (repositories.length || !requireAtLeastOne) {
+        break;
+      }
+      console.log("Please enter at least one repository.");
+      continue;
+    }
+
+    if (!/^[^/]+\/[^/]+$/.test(repo)) {
+      console.log("Please enter repositories using the owner/name format.");
+      continue;
+    }
+
+    if (!repositories.includes(repo)) {
+      repositories.push(repo);
+    }
+  }
+
+  return repositories;
+}
+
+const PERSONAL_REPOS = "__personal__";
+const MANUAL_REPO_CHOICE = "__manual__";
+
 async function runSetupWizard(configPath: string): Promise<RawConfig> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(
@@ -66,124 +210,251 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
   console.log("\nConfiguration file not found. Let's create one together.");
   console.log("Press Enter to accept the suggestion shown in brackets.\n");
 
-  const rl = readline.createInterface({ input, output });
+  const { githubToken } = await inquirer.prompt<{ githubToken: string }>([
+    {
+      type: "password",
+      name: "githubToken",
+      message: "GitHub personal access token (with repo scope)",
+      mask: "*",
+      validate: (value: string) => (value.trim().length ? true : "Token is required."),
+      filter: (value: string) => value.trim(),
+    },
+  ]);
 
-  const ask = async (question: string, defaultValue?: string): Promise<string> => {
-    const suffix = defaultValue ? ` [${defaultValue}]` : "";
-    const answer = (await rl.question(`${question}${suffix}: `)).trim();
-    return answer.length ? answer : defaultValue ?? "";
-  };
-
-  const askRequired = async (question: string, defaultValue?: string): Promise<string> => {
-    while (true) {
-      const answer = await ask(question, defaultValue);
-      if (answer.trim().length) {
-        return answer.trim();
-      }
-      console.log("This field is required.");
-    }
-  };
-
-  const askYesNo = async (question: string, defaultValue = false): Promise<boolean> => {
-    const yesValues = new Set(["y", "yes"]);
-    const noValues = new Set(["n", "no"]);
-    const defaultLabel = defaultValue ? "Y/n" : "y/N";
-
-    while (true) {
-      const answer = (await ask(`${question} (${defaultLabel})`)).toLowerCase();
-      if (!answer) {
-        return defaultValue;
-      }
-      if (yesValues.has(answer)) {
-        return true;
-      }
-      if (noValues.has(answer)) {
-        return false;
-      }
-      console.log("Please answer with 'y' or 'n'.");
-    }
-  };
-
-  const askNumber = async (question: string, defaultValue: number): Promise<number> => {
-    while (true) {
-      const answer = await ask(question, String(defaultValue));
-      const parsed = Number(answer);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        return parsed;
-      }
-      console.log("Please enter a positive number.");
-    }
-  };
-
+  let organizations: string[] = [];
   try {
-    const githubToken = await askRequired("GitHub personal access token (with repo scope)");
-    const repoCount = Math.max(1, Math.round(await askNumber("How many GitHub repositories should be monitored?", 1)));
-
-    const repos: GitHubRepoConfig[] = [];
-    for (let i = 0; i < repoCount; i += 1) {
-      console.log(`\nRepository ${i + 1} of ${repoCount}`);
-      const name = await askRequired("  Repository full name (owner/repo)");
-      const basePathInput = await ask(
-        "  Base path where orchestrator can create agent clones",
-        "~/issue-orchestrator-worktrees"
-      );
-      repos.push({
-        name,
-        base_repo_path: expandHomePath(basePathInput),
-      });
-    }
-
-    const maxConcurrent = Math.max(1, Math.round(await askNumber("Maximum concurrent issues to process", DEFAULT_MAX_CONCURRENT)));
-
-    const useTelegram = await askYesNo("Configure Telegram notifications?", false);
-    let telegramConfig: RawConfig["telegram"] | undefined;
-    if (useTelegram) {
-      const botToken = await askRequired("Telegram bot token");
-      const chatId = await askRequired("Telegram chat ID");
-      telegramConfig = { bot_token: botToken, chat_id: chatId };
-    }
-
-    const useSlack = await askYesNo("Configure Slack notifications?", false);
-    let slackConfig: RawConfig["slack"] | undefined;
-    if (useSlack) {
-      const botToken = await askRequired("Slack bot token");
-      const channelId = await askRequired("Slack channel ID");
-      slackConfig = { bot_token: botToken, channel_id: channelId };
-    }
-
-    const claudePathInput = await ask("Claude CLI path", DEFAULT_CLAUDE_BIN);
-    const claudePath = claudePathInput ? expandHomePath(claudePathInput) : DEFAULT_CLAUDE_BIN;
-    const claudeTimeout = Math.max(1, Math.round(await askNumber("Claude run timeout in seconds", DEFAULT_TIMEOUT_SECONDS)));
-    const claudeCheckInterval = Math.max(1, Math.round(await askNumber("Claude status check interval (seconds)", DEFAULT_CHECK_INTERVAL)));
-
-    const config: RawConfig = {
-      github: {
-        token: githubToken,
-        repos,
-        max_concurrent: maxConcurrent,
-      },
-      claude: {
-        path: claudePath,
-        timeout_seconds: claudeTimeout,
-        check_interval: claudeCheckInterval,
-      },
-    };
-
-    if (telegramConfig) {
-      config.telegram = telegramConfig;
-    }
-    if (slackConfig) {
-      config.slack = slackConfig;
-    }
-
-    await mkdir(dirname(configPath), { recursive: true });
-    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-
-    console.log(`\nCreated configuration at ${configPath}.\n`);
-    return config;
-  } finally {
-    rl.close();
+    organizations = await fetchUserOrganizations(githubToken);
+  } catch (error) {
+    console.warn("Failed to fetch GitHub organizations:", error);
   }
+
+  const organizationChoices = [
+    { name: "Personal repositories", value: PERSONAL_REPOS },
+    ...organizations.map((org) => ({ name: org, value: org })),
+  ];
+
+  const { organization } = await inquirer.prompt<{ organization: string }>([
+    {
+      type: "list",
+      name: "organization",
+      message: "Select organization",
+      choices: organizationChoices,
+    },
+  ]);
+
+  let availableRepos: GitHubRepoSummary[] = [];
+  try {
+    availableRepos =
+      organization === PERSONAL_REPOS
+        ? await fetchAvailableRepos(githubToken)
+        : await fetchOrgRepos(githubToken, organization);
+  } catch (error) {
+    console.warn("Failed to fetch repositories automatically:", error);
+  }
+
+  let selectedRepositories: string[] = [];
+  const manualRepositories: string[] = [];
+
+  if (availableRepos.length) {
+    const repoChoices = availableRepos.map((repo) => ({ name: repo.full_name, value: repo.full_name }));
+    repoChoices.push({ name: "Enter repository manually", value: MANUAL_REPO_CHOICE });
+
+    const { repositories } = await inquirer.prompt<{ repositories: string[] }>([
+      {
+        type: "checkbox",
+        name: "repositories",
+        message: "Select repositories to monitor",
+        choices: repoChoices,
+        loop: false,
+        pageSize: Math.min(repoChoices.length, 12),
+        validate: (value: string[]) => (value.length ? true : "Select at least one repository."),
+      },
+    ]);
+
+    const manualSelected = repositories.includes(MANUAL_REPO_CHOICE);
+    selectedRepositories = repositories.filter((repo) => repo !== MANUAL_REPO_CHOICE);
+
+    if (manualSelected) {
+      manualRepositories.push(...(await promptManualRepositories(false)));
+    }
+
+    if (!selectedRepositories.length && !manualRepositories.length) {
+      console.log("Please choose at least one repository.");
+      manualRepositories.push(...(await promptManualRepositories(true)));
+    }
+  } else {
+    console.log("Could not list repositories automatically. Enter full names manually.");
+    manualRepositories.push(...(await promptManualRepositories(true)));
+  }
+
+  const uniqueRepos = Array.from(new Set([...selectedRepositories, ...manualRepositories]));
+
+  const { baseDir } = await inquirer.prompt<{ baseDir: string }>([
+    {
+      type: "input",
+      name: "baseDir",
+      message: "Base directory for agent worktrees",
+      default: "~/.issue-orchestrator/repos",
+      filter: (value: string) => value.trim(),
+      validate: (value: string) => (value.trim().length ? true : "Base directory is required."),
+    },
+  ]);
+  const baseRepoPath = expandHomePath(baseDir);
+
+  const repos: GitHubRepoConfig[] = uniqueRepos.map((name) => ({
+    name,
+    base_repo_path: baseRepoPath,
+  }));
+
+  const { maxConcurrent } = await inquirer.prompt<{ maxConcurrent: string }>([
+    {
+      type: "input",
+      name: "maxConcurrent",
+      message: "Maximum concurrent issues to process",
+      default: String(DEFAULT_MAX_CONCURRENT),
+      validate: (value: string) => {
+        const parsed = Number(value);
+        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+      },
+    },
+  ]);
+  const maxConcurrentValue = Math.max(1, Math.round(Number(maxConcurrent)));
+
+  const { configureTelegram } = await inquirer.prompt<{ configureTelegram: boolean }>([
+    {
+      type: "confirm",
+      name: "configureTelegram",
+      message: "Configure Telegram notifications?",
+      default: false,
+    },
+  ]);
+
+  let telegramConfig: RawConfig["telegram"] | undefined;
+  if (configureTelegram) {
+    const { telegramBotToken } = await inquirer.prompt<{ telegramBotToken: string }>([
+      {
+        type: "password",
+        name: "telegramBotToken",
+        message: "Telegram bot token",
+        mask: "*",
+        validate: (value: string) => (value.trim().length ? true : "Token is required."),
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+    const { telegramChatId } = await inquirer.prompt<{ telegramChatId: string }>([
+      {
+        type: "input",
+        name: "telegramChatId",
+        message: "Telegram chat ID",
+        validate: (value: string) => (value.trim().length ? true : "Chat ID is required."),
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+    telegramConfig = { bot_token: telegramBotToken, chat_id: telegramChatId };
+  }
+
+  const { configureSlack } = await inquirer.prompt<{ configureSlack: boolean }>([
+    {
+      type: "confirm",
+      name: "configureSlack",
+      message: "Configure Slack notifications?",
+      default: false,
+    },
+  ]);
+
+  let slackConfig: RawConfig["slack"] | undefined;
+  if (configureSlack) {
+    const { slackBotToken } = await inquirer.prompt<{ slackBotToken: string }>([
+      {
+        type: "password",
+        name: "slackBotToken",
+        message: "Slack bot token",
+        mask: "*",
+        validate: (value: string) => (value.trim().length ? true : "Token is required."),
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+    const { slackChannelId } = await inquirer.prompt<{ slackChannelId: string }>([
+      {
+        type: "input",
+        name: "slackChannelId",
+        message: "Slack channel ID",
+        validate: (value: string) => (value.trim().length ? true : "Channel ID is required."),
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+    slackConfig = { bot_token: slackBotToken, channel_id: slackChannelId };
+  }
+
+  const whichClaude = spawnSync("which", ["claude"], { encoding: "utf8" });
+  const detectedClaude = whichClaude.status === 0 ? whichClaude.stdout.trim() : "";
+  const claudeDefault = detectedClaude || DEFAULT_CLAUDE_BIN;
+
+  const { claudePath } = await inquirer.prompt<{ claudePath: string }>([
+    {
+      type: "input",
+      name: "claudePath",
+      message: "Claude CLI path",
+      default: claudeDefault,
+      filter: (value: string) => value.trim(),
+      validate: (value: string) => (value.trim().length ? true : "Claude path is required."),
+    },
+  ]);
+  const resolvedClaudePath = expandHomePath(claudePath || claudeDefault);
+
+  const { claudeTimeout } = await inquirer.prompt<{ claudeTimeout: string }>([
+    {
+      type: "input",
+      name: "claudeTimeout",
+      message: "Claude run timeout in seconds",
+      default: String(DEFAULT_TIMEOUT_SECONDS),
+      validate: (value: string) => {
+        const parsed = Number(value);
+        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+      },
+    },
+  ]);
+  const claudeTimeoutValue = Math.max(1, Math.round(Number(claudeTimeout)));
+
+  const { claudeCheckInterval } = await inquirer.prompt<{ claudeCheckInterval: string }>([
+    {
+      type: "input",
+      name: "claudeCheckInterval",
+      message: "Claude status check interval (seconds)",
+      default: String(DEFAULT_CHECK_INTERVAL),
+      validate: (value: string) => {
+        const parsed = Number(value);
+        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+      },
+    },
+  ]);
+  const claudeCheckIntervalValue = Math.max(1, Math.round(Number(claudeCheckInterval)));
+
+  const config: RawConfig = {
+    github: {
+      token: githubToken,
+      repos,
+      max_concurrent: maxConcurrentValue,
+    },
+    claude: {
+      path: resolvedClaudePath,
+      timeout_seconds: claudeTimeoutValue,
+      check_interval: claudeCheckIntervalValue,
+    },
+  };
+
+  if (telegramConfig) {
+    config.telegram = telegramConfig;
+  }
+  if (slackConfig) {
+    config.slack = slackConfig;
+  }
+
+  await mkdir(dirname(configPath), { recursive: true });
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+
+  console.log(`\nCreated configuration at ${configPath}.\n`);
+  return config;
 }
 
 async function loadRawConfig(configPath: string): Promise<RawConfig> {

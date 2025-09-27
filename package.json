@@ -2,6 +2,9 @@
   "name": "issue-orchestrator",
   "version": "2.0.0",
   "type": "module",
+  "bin": {
+    "issue-orchestrator": "bin/issue-orchestrator"
+  },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist",
     "start": "bun run src/runOrchestrator.ts",
@@ -9,5 +12,8 @@
   },
   "devDependencies": {
     "@types/node": "20.11.19"
+  },
+  "dependencies": {
+    "inquirer": "^12.9.6"
   }
 }
