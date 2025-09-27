@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { main } from "../src/lib/orchestrator";
+import packageJson from "../package.json" assert { type: 'json' };
+const VERSION = packageJson.version ?? '0.0.0';
 import { configureInteractive } from "../src/lib/config";
 
 function printHelp(): void {
@@ -8,7 +10,9 @@ function printHelp(): void {
 Options:
   --config [path]   Launch interactive configuration (default: config.json)
   --help            Show this help message
-`);
+  --version         Show the current version
+
+Version: ${VERSION}`);
 }
 
 async function run(): Promise<void> {
@@ -16,12 +20,15 @@ async function run(): Promise<void> {
   let showHelp = false;
   let configMode = false;
   let configPath: string | undefined;
+  let showVersion = false;
   const unknownArgs: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--help" || arg === "-h") {
       showHelp = true;
+    } else if (arg === "--version" || arg === "-v") {
+      showVersion = true;
     } else if (arg === "--config" || arg === "-c") {
       configMode = true;
       const next = args[i + 1];
@@ -49,6 +56,11 @@ async function run(): Promise<void> {
   if (showHelp) {
     printHelp();
     process.exitCode = unknownArgs.length ? 1 : 0;
+    return;
+  }
+
+  if (showVersion) {
+    console.log(`issue-orchestrator ${VERSION}`);
     return;
   }
 
