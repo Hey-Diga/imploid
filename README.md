@@ -46,16 +46,16 @@ Configuration can be rerun anytime; the wizard pre-fills existing values while k
 
 ```bash
 # Run orchestrator using defaults
-bunx imploid
+bunx imploid@latest
 
 # Show help or version
-bunx imploid --help
-bunx imploid --version
+bunx imploid@latest --help
+bunx imploid@latest --version
 
 # Edit configuration explicitly
-bunx imploid --config
+bunx imploid@latest --config
 # or
-bunx imploid --config ~/.imploid/config.json
+bunx imploid@latest --config ~/.imploid/config.json
 ```
 
 ### Runtime Flow
