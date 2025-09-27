@@ -199,7 +199,7 @@ async function promptManualRepositories(requireAtLeastOne: boolean): Promise<str
 const PERSONAL_REPOS = "__personal__";
 const MANUAL_REPO_CHOICE = "__manual__";
 
-async function runSetupWizard(configPath: string): Promise<RawConfig> {
+async function interactiveConfigure(configPath: string, existing?: RawConfig): Promise<RawConfig> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(
       `Configuration file not found: ${configPath}\n` +
@@ -207,19 +207,29 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
     );
   }
 
-  console.log("\nConfiguration file not found. Let's create one together.");
-  console.log("Press Enter to accept the suggestion shown in brackets.\n");
+  const modeLabel = existing ? "update" : "create";
+  console.log(`\nLet's ${modeLabel} your configuration.`);
 
-  const { githubToken } = await inquirer.prompt<{ githubToken: string }>([
+  const existingToken = existing?.github?.token ?? "";
+  const { githubToken: tokenAnswer } = await inquirer.prompt<{ githubToken: string }>([
     {
       type: "password",
       name: "githubToken",
-      message: "GitHub personal access token (with repo scope)",
+      message: existing
+        ? "GitHub personal access token (leave blank to keep current)"
+        : "GitHub personal access token (with repo scope)",
       mask: "*",
-      validate: (value: string) => (value.trim().length ? true : "Token is required."),
+      default: existingToken || undefined,
+      validate: (value: string) =>
+        value.trim().length || existingToken ? true : "Token is required.",
       filter: (value: string) => value.trim(),
     },
   ]);
+
+  const githubToken = tokenAnswer.trim().length ? tokenAnswer.trim() : existingToken;
+  if (!githubToken) {
+    throw new Error("GitHub personal access token is required.");
+  }
 
   let organizations: string[] = [];
   try {
@@ -228,10 +238,17 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
     console.warn("Failed to fetch GitHub organizations:", error);
   }
 
+  const existingRepos = existing?.github?.repos ?? [];
+  const existingRepoNames = existingRepos.map((repo) => repo.name);
   const organizationChoices = [
     { name: "Personal repositories", value: PERSONAL_REPOS },
     ...organizations.map((org) => ({ name: org, value: org })),
   ];
+
+  const defaultOwner = existingRepoNames.length ? existingRepoNames[0].split("/")[0] : PERSONAL_REPOS;
+  const organizationDefault = organizationChoices.some((choice) => choice.value === defaultOwner)
+    ? defaultOwner
+    : PERSONAL_REPOS;
 
   const { organization } = await inquirer.prompt<{ organization: string }>([
     {
@@ -239,6 +256,7 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
       name: "organization",
       message: "Select organization",
       choices: organizationChoices,
+      default: organizationDefault,
     },
   ]);
 
@@ -256,7 +274,24 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
   const manualRepositories: string[] = [];
 
   if (availableRepos.length) {
-    const repoChoices = availableRepos.map((repo) => ({ name: repo.full_name, value: repo.full_name }));
+    const availableRepoSet = new Set(availableRepos.map((repo) => repo.full_name));
+    const existingRepoSet = new Set(existingRepoNames);
+
+    const repoChoices = availableRepos.map((repo) => ({
+      name: repo.full_name,
+      value: repo.full_name,
+      checked: existingRepoSet.has(repo.full_name),
+    }));
+
+    const manualExisting = existingRepoNames.filter((name) => !availableRepoSet.has(name));
+    for (const name of manualExisting) {
+      repoChoices.push({
+        name: `${name} (from current config)`,
+        value: name,
+        checked: true,
+      });
+    }
+
     repoChoices.push({ name: "Enter repository manually", value: MANUAL_REPO_CHOICE });
 
     const { repositories } = await inquirer.prompt<{ repositories: string[] }>([
@@ -283,18 +318,28 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
       manualRepositories.push(...(await promptManualRepositories(true)));
     }
   } else {
-    console.log("Could not list repositories automatically. Enter full names manually.");
-    manualRepositories.push(...(await promptManualRepositories(true)));
+    if (existingRepoNames.length) {
+      console.log("Could not list repositories automatically. Keeping existing entries.");
+      selectedRepositories = [...existingRepoNames];
+      manualRepositories.push(...(await promptManualRepositories(false)));
+    } else {
+      console.log("Could not list repositories automatically. Enter full names manually.");
+      manualRepositories.push(...(await promptManualRepositories(true)));
+    }
   }
 
   const uniqueRepos = Array.from(new Set([...selectedRepositories, ...manualRepositories]));
+  if (!uniqueRepos.length) {
+    throw new Error("At least one repository must be configured.");
+  }
 
+  const existingBaseDir = existingRepos[0]?.base_repo_path ?? "~/.issue-orchestrator/repos";
   const { baseDir } = await inquirer.prompt<{ baseDir: string }>([
     {
       type: "input",
       name: "baseDir",
       message: "Base directory for agent worktrees",
-      default: "~/.issue-orchestrator/repos",
+      default: existingBaseDir,
       filter: (value: string) => value.trim(),
       validate: (value: string) => (value.trim().length ? true : "Base directory is required."),
     },
@@ -306,12 +351,13 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
     base_repo_path: baseRepoPath,
   }));
 
+  const existingMaxConcurrent = existing?.github?.max_concurrent ?? DEFAULT_MAX_CONCURRENT;
   const { maxConcurrent } = await inquirer.prompt<{ maxConcurrent: string }>([
     {
       type: "input",
       name: "maxConcurrent",
       message: "Maximum concurrent issues to process",
-      default: String(DEFAULT_MAX_CONCURRENT),
+      default: String(existingMaxConcurrent),
       validate: (value: string) => {
         const parsed = Number(value);
         return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
@@ -325,7 +371,7 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
       type: "confirm",
       name: "configureTelegram",
       message: "Configure Telegram notifications?",
-      default: false,
+      default: Boolean(existing?.telegram),
     },
   ]);
 
@@ -337,7 +383,9 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
         name: "telegramBotToken",
         message: "Telegram bot token",
         mask: "*",
-        validate: (value: string) => (value.trim().length ? true : "Token is required."),
+        default: existing?.telegram?.bot_token ?? undefined,
+        validate: (value: string) =>
+          value.trim().length || existing?.telegram?.bot_token ? true : "Token is required.",
         filter: (value: string) => value.trim(),
       },
     ]);
@@ -346,11 +394,15 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
         type: "input",
         name: "telegramChatId",
         message: "Telegram chat ID",
-        validate: (value: string) => (value.trim().length ? true : "Chat ID is required."),
+        default: existing?.telegram?.chat_id ?? undefined,
+        validate: (value: string) =>
+          value.trim().length || existing?.telegram?.chat_id ? true : "Chat ID is required.",
         filter: (value: string) => value.trim(),
       },
     ]);
-    telegramConfig = { bot_token: telegramBotToken, chat_id: telegramChatId };
+    const resolvedTelegramToken = telegramBotToken || existing?.telegram?.bot_token || "";
+    const resolvedTelegramChatId = telegramChatId || existing?.telegram?.chat_id || "";
+    telegramConfig = { bot_token: resolvedTelegramToken, chat_id: resolvedTelegramChatId };
   }
 
   const { configureSlack } = await inquirer.prompt<{ configureSlack: boolean }>([
@@ -358,7 +410,7 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
       type: "confirm",
       name: "configureSlack",
       message: "Configure Slack notifications?",
-      default: false,
+      default: Boolean(existing?.slack),
     },
   ]);
 
@@ -370,7 +422,9 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
         name: "slackBotToken",
         message: "Slack bot token",
         mask: "*",
-        validate: (value: string) => (value.trim().length ? true : "Token is required."),
+        default: existing?.slack?.bot_token ?? undefined,
+        validate: (value: string) =>
+          value.trim().length || existing?.slack?.bot_token ? true : "Token is required.",
         filter: (value: string) => value.trim(),
       },
     ]);
@@ -379,16 +433,20 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
         type: "input",
         name: "slackChannelId",
         message: "Slack channel ID",
-        validate: (value: string) => (value.trim().length ? true : "Channel ID is required."),
+        default: existing?.slack?.channel_id ?? undefined,
+        validate: (value: string) =>
+          value.trim().length || existing?.slack?.channel_id ? true : "Channel ID is required.",
         filter: (value: string) => value.trim(),
       },
     ]);
-    slackConfig = { bot_token: slackBotToken, channel_id: slackChannelId };
+    const resolvedSlackToken = slackBotToken || existing?.slack?.bot_token || "";
+    const resolvedSlackChannel = slackChannelId || existing?.slack?.channel_id || "";
+    slackConfig = { bot_token: resolvedSlackToken, channel_id: resolvedSlackChannel };
   }
 
   const whichClaude = spawnSync("which", ["claude"], { encoding: "utf8" });
   const detectedClaude = whichClaude.status === 0 ? whichClaude.stdout.trim() : "";
-  const claudeDefault = detectedClaude || DEFAULT_CLAUDE_BIN;
+  const claudeDefault = existing?.claude?.path ?? (detectedClaude || DEFAULT_CLAUDE_BIN);
 
   const { claudePath } = await inquirer.prompt<{ claudePath: string }>([
     {
@@ -402,12 +460,13 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
   ]);
   const resolvedClaudePath = expandHomePath(claudePath || claudeDefault);
 
+  const existingTimeout = existing?.claude?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
   const { claudeTimeout } = await inquirer.prompt<{ claudeTimeout: string }>([
     {
       type: "input",
       name: "claudeTimeout",
       message: "Claude run timeout in seconds",
-      default: String(DEFAULT_TIMEOUT_SECONDS),
+      default: String(existingTimeout),
       validate: (value: string) => {
         const parsed = Number(value);
         return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
@@ -416,12 +475,13 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
   ]);
   const claudeTimeoutValue = Math.max(1, Math.round(Number(claudeTimeout)));
 
+  const existingInterval = existing?.claude?.check_interval ?? DEFAULT_CHECK_INTERVAL;
   const { claudeCheckInterval } = await inquirer.prompt<{ claudeCheckInterval: string }>([
     {
       type: "input",
       name: "claudeCheckInterval",
       message: "Claude status check interval (seconds)",
-      default: String(DEFAULT_CHECK_INTERVAL),
+      default: String(existingInterval),
       validate: (value: string) => {
         const parsed = Number(value);
         return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
@@ -453,11 +513,11 @@ async function runSetupWizard(configPath: string): Promise<RawConfig> {
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 
-  console.log(`\nCreated configuration at ${configPath}.\n`);
+  console.log(`\nConfiguration saved to ${configPath}.\n`);
   return config;
 }
 
-async function loadRawConfig(configPath: string): Promise<RawConfig> {
+async function readRawConfigIfExists(configPath: string): Promise<RawConfig | undefined> {
   try {
     const content = await readFile(configPath, "utf8");
     const parsed = JSON.parse(content) as RawConfig;
@@ -467,11 +527,18 @@ async function loadRawConfig(configPath: string): Promise<RawConfig> {
     return parsed;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      const created = await runSetupWizard(configPath);
-      return created;
+      return undefined;
     }
     throw error;
   }
+}
+
+async function loadRawConfig(configPath: string): Promise<RawConfig> {
+  const existing = await readRawConfigIfExists(configPath);
+  if (existing) {
+    return existing;
+  }
+  return interactiveConfigure(configPath);
 }
 
 export class Config {
@@ -560,4 +627,11 @@ export class Config {
   get claudePath(): string {
     return this.config.claude.path ?? DEFAULT_CLAUDE_BIN;
   }
+}
+
+export async function configureInteractive(configPath = "config.json"): Promise<Config> {
+  const resolved = resolveConfigPath(configPath);
+  const existing = await readRawConfigIfExists(resolved);
+  const updated = await interactiveConfigure(resolved, existing);
+  return new Config(resolved, updated);
 }

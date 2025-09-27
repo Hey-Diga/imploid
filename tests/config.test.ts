@@ -147,6 +147,90 @@ describe("Config.loadOrCreate", () => {
     expect(config.claudeCheckInterval).toBe(12);
   });
 
+  test("allows updating existing configuration interactively", async () => {
+    const configPath = join(tempDir, "config.json");
+    const existingPayload = {
+      github: {
+        token: "ghp_existing",
+        repos: [
+          {
+            name: "owner/sample-repo",
+            base_repo_path: "~/worktrees",
+          },
+        ],
+        max_concurrent: 4,
+      },
+      telegram: {
+        bot_token: "old-telegram",
+        chat_id: "old-chat",
+      },
+      slack: {
+        bot_token: "old-slack",
+        channel_id: "old-channel",
+      },
+      claude: {
+        path: "/usr/local/bin/claude",
+        timeout_seconds: 500,
+        check_interval: 10,
+      },
+    };
+    writeFileSync(configPath, JSON.stringify(existingPayload, null, 2));
+
+    promptResponses.push(
+      { githubToken: "ghp_updated" },
+      { organization: "__personal__" },
+      { repositories: ["owner/sample-repo", "__manual__"] },
+      { repo: "owner/extra-repo" },
+      { repo: "" },
+      { baseDir: "~/updated-worktrees" },
+      { maxConcurrent: "5" },
+      { configureTelegram: true },
+      { telegramBotToken: "new-telegram" },
+      { telegramChatId: "new-chat" },
+      { configureSlack: false },
+      { claudePath: "/opt/claude" },
+      { claudeTimeout: "3600" },
+      { claudeCheckInterval: "15" }
+    );
+
+    global.fetch = mock(async (input: RequestInfo) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/user/orgs")) {
+        return new Response(JSON.stringify([{ login: "owner" }]), { status: 200 });
+      }
+      if (url.includes("/user/repos")) {
+        return new Response(JSON.stringify([{ full_name: "owner/sample-repo" }]), { status: 200 });
+      }
+      return new Response("[]", { status: 200 });
+    }) as any;
+
+    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+
+    const { configureInteractive } = await import("../src/lib/config");
+    const config = await configureInteractive(configPath);
+
+    const parsed = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(config.githubToken).toBe("ghp_updated");
+    expect(parsed.github.repos).toEqual([
+      {
+        name: "owner/sample-repo",
+        base_repo_path: resolve(process.env.HOME ?? "", "updated-worktrees"),
+      },
+      {
+        name: "owner/extra-repo",
+        base_repo_path: resolve(process.env.HOME ?? "", "updated-worktrees"),
+      },
+    ]);
+    expect(config.maxConcurrent).toBe(5);
+    expect(config.telegramBotToken).toBe("new-telegram");
+    expect(config.telegramChatId).toBe("new-chat");
+    expect(config.slackBotToken).toBe("");
+    expect(config.claudePath).toBe("/opt/claude");
+    expect(config.claudeTimeout).toBe(3600);
+    expect(config.claudeCheckInterval).toBe(15);
+  });
+
   test("derives repository list from legacy single repo fields", async () => {
     const configPath = join(tempDir, "config.json");
     const payload = {
