@@ -1,9 +1,9 @@
 {
-  "name": "issue-orchestrator",
+  "name": "imploid",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "issue-orchestrator": "bin/issue-orchestrator"
+    "imploid": "bin/imploid"
   },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist",

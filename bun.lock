@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "issue-orchestrator",
+      "name": "imploid",
       "dependencies": {
         "inquirer": "^12.9.6",
       },

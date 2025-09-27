@@ -41,7 +41,7 @@ interface ProcessorDefinition {
   };
 }
 
-export class IssueOrchestrator {
+export class ImploidOrchestrator {
   private readonly stateManager = new StateManager();
   private readonly githubClient: GitHubClient;
   private readonly repoManager: RepoManager;
@@ -290,6 +290,6 @@ export class IssueOrchestrator {
 
 export async function main(): Promise<void> {
   const config = await Config.loadOrCreate();
-  const orchestrator = new IssueOrchestrator(config);
+  const orchestrator = new ImploidOrchestrator(config);
   await orchestrator.run();
 }

@@ -1,11 +1,11 @@
-# Issue Orchestrator
+# Imploid
 
 Modern GitHub issue triage and automation orchestrator built with Bun. The tool polls selected repositories for issues marked as **ready-for-claude**, provisions clean worktrees, and hands them off to automated agents powered by either the Claude CLI or OpenAI Codex CLI. Notifications and state management keep humans in the loop while agents batch through the backlog.
 
 ## Highlights
 
-- **Single binary CLI** – `issue-orchestrator` handles orchestration, configuration, and version reporting.
-- **Guided configuration** – prompts fetch repositories from GitHub, apply consistent defaults, and persist everything under `~/.issue-orchestrator`.
+- **Single binary CLI** – `imploid` handles orchestration, configuration, and version reporting.
+- **Guided configuration** – prompts fetch repositories from GitHub, apply consistent defaults, and persist everything under `~/.imploid`.
 - **Pluggable processors** – shared prompt pipeline with concrete runners for Claude and Codex.
 - **Robust state tracking** – JSON state file prevents duplicate processing, enforces concurrency limits, and survives restarts.
 - **Notifier integrations** – optional Slack and Telegram messages for start, completion, failure, or required input.
@@ -23,21 +23,21 @@ Modern GitHub issue triage and automation orchestrator built with Bun. The tool 
 
 ```bash
 git clone <repo>
-cd issue-orchestrator
+cd imploid
 bun install
 ```
 
 ### Configure
 
 ```bash
-bunx issue-orchestrator --config
+bunx imploid --config
 ```
 
 The wizard will:
 
 1. Ask for a GitHub token (tap Enter to reuse the saved token on subsequent runs).
 2. List organizations, then repositories, letting you multi-select with checkboxes.
-3. Fix the working directories to `~/.issue-orchestrator/config.json` and `~/.issue-orchestrator/repos`.
+3. Fix the working directories to `~/.imploid/config.json` and `~/.imploid/repos`.
 4. Configure concurrency, optional Slack/Telegram credentials, and autodetected CLI paths for Claude/Codex.
 
 Configuration can be rerun anytime; the wizard pre-fills existing values while keeping directories consistent.
@@ -46,25 +46,25 @@ Configuration can be rerun anytime; the wizard pre-fills existing values while k
 
 ```bash
 # Run orchestrator using defaults
-bunx issue-orchestrator
+bunx imploid
 
 # Show help or version
-bunx issue-orchestrator --help
-bunx issue-orchestrator --version
+bunx imploid --help
+bunx imploid --version
 
 # Edit configuration explicitly
-bunx issue-orchestrator --config
+bunx imploid --config
 # or
-bunx issue-orchestrator --config ~/.issue-orchestrator/config.json
+bunx imploid --config ~/.imploid/config.json
 ```
 
 ### Runtime Flow
 
-1. **State Load** – `~/.issue-orchestrator/processing-state.json` is read to resume in-flight issues.
+1. **State Load** – `~/.imploid/processing-state.json` is read to resume in-flight issues.
 2. **Repository Polling** – each configured repo is queried for issues labeled `ready-for-claude`.
 3. **Scheduling** – up to `max_concurrent` issues run at once. When a slot opens, the orchestrator reserves agent slots for every processor and launches them together on the same issue.
 4. **Processing** –
-   - The `RepoManager` fetches/clones worktrees beneath `~/.issue-orchestrator/repos/<processor>/<repo>_agent_<index>` so each processor operates in its own sandbox.
+   - The `RepoManager` fetches/clones worktrees beneath `~/.imploid/repos/<processor>/<repo>_agent_<index>` so each processor operates in its own sandbox.
    - The shared prompt from `src/lib/processors/prompt.ts` guides both Claude and Codex CLI runners.
    - Processors stream output, persist session metadata, enforce timeouts, and update state.
    - Branches are created as `issue-<number>-<processor>` so all processors can work the same issue concurrently without colliding.
@@ -94,7 +94,7 @@ src/
 tests/
   *.test.ts           # Bun test suite mirrors the src modules
 bin/
-  issue-orchestrator  # CLI entry point (Bun script)
+  imploid  # CLI entry point (Bun script)
 ```
 
 ## Testing
@@ -110,14 +110,14 @@ bun test
 
 - **Missing CLI binaries**: ensure `claude` or `codex` are installed and discoverable via `which`. The wizard displays the detected paths; override them during configuration if necessary.
 - **Permission issues on repos**: the orchestrator expects SSH access (`git@github.com`). Verify you can clone the repo manually with the same user.
-- **Slack/Telegram notifications not arriving**: double check tokens and channel/chat IDs in `~/.issue-orchestrator/config.json`. Rerun the wizard with `--config` to update credentials.
-- **Stuck state**: delete `~/.issue-orchestrator/processing-state.json` only if you are certain no automated work is in flight. Otherwise use the state manager to resolve issues first.
+- **Slack/Telegram notifications not arriving**: double check tokens and channel/chat IDs in `~/.imploid/config.json`. Rerun the wizard with `--config` to update credentials.
+- **Stuck state**: delete `~/.imploid/processing-state.json` only if you are certain no automated work is in flight. Otherwise use the state manager to resolve issues first.
 
 ## Contributing
 
 1. Fork the repository and create a branch (e.g., `feature/codex-retries`).
 2. Make changes with Bun formatting conventions and keep code comments succinct.
-3. Run `bun test` and manually exercise `bunx issue-orchestrator --config` if changes touch the wizard.
+3. Run `bun test` and manually exercise `bunx imploid --config` if changes touch the wizard.
 4. Submit a pull request referencing any related issues.
 
 ## License

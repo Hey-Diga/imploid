@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
-import { IssueOrchestrator } from "../src/lib/orchestrator";
+import { ImploidOrchestrator } from "../src/lib/orchestrator";
 import { IssueState, ProcessStatus } from "../src/lib/models";
 
 const createStubConfig = (basePath: string) => {
@@ -50,7 +50,7 @@ const createStubConfig = (basePath: string) => {
   } as const;
 };
 
-describe("IssueOrchestrator", () => {
+describe("ImploidOrchestrator", () => {
   let tempDir: string;
   let originalCwd: string;
 
@@ -109,7 +109,7 @@ describe("IssueOrchestrator", () => {
   test("runs without processing when no issues are returned", async () => {
     const baseRepoPath = resolve(tempDir, "repos");
     const config = createStubConfig(baseRepoPath);
-    const orchestrator = new IssueOrchestrator(config as any);
+    const orchestrator = new ImploidOrchestrator(config as any);
 
     const orchestratorAny = orchestrator as any;
     orchestratorAny.githubClient.getReadyIssues = mock(async () => []);
@@ -132,7 +132,7 @@ describe("IssueOrchestrator", () => {
   test("processes a new issue through completion", async () => {
     const baseRepoPath = resolve(tempDir, "repos");
     const config = createStubConfig(baseRepoPath);
-    const orchestrator = new IssueOrchestrator(config as any);
+    const orchestrator = new ImploidOrchestrator(config as any);
     const orchestratorAny = orchestrator as any;
 
     const stateManagerStub = createStateManagerStub();
@@ -181,7 +181,7 @@ describe("IssueOrchestrator", () => {
   test("marks issue as failed when processor reports failure", async () => {
     const baseRepoPath = resolve(tempDir, "repos");
     const config = createStubConfig(baseRepoPath);
-    const orchestrator = new IssueOrchestrator(config as any);
+    const orchestrator = new ImploidOrchestrator(config as any);
     const orchestratorAny = orchestrator as any;
 
     const stateManagerStub = createStateManagerStub();
@@ -223,7 +223,7 @@ describe("IssueOrchestrator", () => {
   test("schedules each issue once and runs all processors concurrently", async () => {
     const baseRepoPath = resolve(tempDir, "repos");
     const config = createStubConfig(baseRepoPath);
-    const orchestrator = new IssueOrchestrator(config as any);
+    const orchestrator = new ImploidOrchestrator(config as any);
     const orchestratorAny = orchestrator as any;
 
     const stateManagerStub = createStateManagerStub();

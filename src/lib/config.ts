@@ -43,7 +43,7 @@ const DEFAULT_TIMEOUT_SECONDS = 3600;
 const DEFAULT_CHECK_INTERVAL = 5;
 const DEFAULT_CLAUDE_BIN = "claude";
 const DEFAULT_CODEX_BIN = "codex";
-const DEFAULT_BASE_DIR = "~/.issue-orchestrator";
+const DEFAULT_BASE_DIR = "~/.imploid";
 const DEFAULT_CONFIG_PATH = `${DEFAULT_BASE_DIR}/config.json`;
 const DEFAULT_REPOS_DIR = `${DEFAULT_BASE_DIR}/repos`;
 

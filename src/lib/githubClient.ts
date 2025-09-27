@@ -18,7 +18,7 @@ export class GitHubClient {
     return {
       Authorization: `token ${this.token}`,
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "issue-orchestrator",
+      "User-Agent": "imploid",
     };
   }
 

@@ -1,10 +1,10 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-The Bun/TypeScript implementation lives in `src`. Core orchestration modules are under `src/lib` (e.g., `orchestrator.ts`, `repoManager.ts`, `processors/claude.ts`, `processors/codex.ts`). Shared utilities and notifiers sit in sibling folders under `src/lib`, while the compiled CLI entry point lives in `bin/issue-orchestrator`. Automated tests mirror this layout under `tests`, using Bun’s test runner. Runtime state files like `~/.issue-orchestrator/processing-state.json` remain out of version control but are essential for local runs.
+The Bun/TypeScript implementation lives in `src`. Core orchestration modules are under `src/lib` (e.g., `orchestrator.ts`, `repoManager.ts`, `processors/claude.ts`, `processors/codex.ts`). Shared utilities and notifiers sit in sibling folders under `src/lib`, while the compiled CLI entry point lives in `bin/imploid`. Automated tests mirror this layout under `tests`, using Bun’s test runner. Runtime state files like `~/.imploid/processing-state.json` remain out of version control but are essential for local runs.
 
 ## Build, Test, and Development Commands
-Install dependencies with `bun install`. Execute the orchestrator using `bunx issue-orchestrator` or run individual modules via `bun run src/...` when debugging. Monitor processor activity with the Bun scripts under `bin/` as needed. Run the full test suite using `bun test`; target specific files with `bun test tests/orchestrator.test.ts` or filter using `-t`.
+Install dependencies with `bun install`. Execute the orchestrator using `bunx imploid` or run individual modules via `bun run src/...` when debugging. Monitor processor activity with the Bun scripts under `bin/` as needed. Run the full test suite using `bun test`; target specific files with `bun test tests/orchestrator.test.ts` or filter using `-t`.
 
 ## Coding Style & Naming Conventions
 Follow the existing TypeScript conventions: four-space indentation, `camelCase` for functions/variables, and `PascalCase` for classes/enums (see `src/lib/models.ts`). Prefer explicit return types and leverage shared utilities instead of introducing duplicate logic. Keep new modules under `src/lib`, exporting through `src/lib/index.ts` only when they are part of the public CLI surface. Configuration templates should stay alongside `README.md` and `config` documentation.

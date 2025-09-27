@@ -5,7 +5,7 @@ const VERSION = packageJson.version ?? '0.0.0';
 import { configureInteractive } from "../src/lib/config";
 
 function printHelp(): void {
-  console.log(`Usage: issue-orchestrator [options]
+  console.log(`Usage: imploid [options]
 
 Options:
   --config [path]   Launch interactive configuration (default: config.json)
@@ -60,7 +60,7 @@ async function run(): Promise<void> {
   }
 
   if (showVersion) {
-    console.log(`issue-orchestrator ${VERSION}`);
+    console.log(`imploid ${VERSION}`);
     return;
   }
 
@@ -71,7 +71,7 @@ async function run(): Promise<void> {
     }
     await main();
   } catch (error) {
-    console.error("Orchestrator failed", error);
+    console.error("Imploid failed", error);
     process.exitCode = 1;
   }
 }

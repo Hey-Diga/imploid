@@ -147,7 +147,7 @@ describe("Config.loadOrCreate", () => {
     expect(existsSync(configPath)).toBe(true);
     const parsed = JSON.parse(readFileSync(configPath, "utf8"));
     expect(parsed.github.repos[0].name).toBe("owner/sample-repo");
-    expect(config.githubRepos[0].base_repo_path).toBe(resolve(process.env.HOME ?? "", ".issue-orchestrator/repos"));
+    expect(config.githubRepos[0].base_repo_path).toBe(resolve(process.env.HOME ?? "", ".imploid/repos"));
     expect(config.maxConcurrent).toBe(2);
     expect(config.slackBotToken).toBe("xoxb-test-token");
     expect(config.slackChannelId).toBe("C123456");
@@ -165,7 +165,7 @@ describe("Config.loadOrCreate", () => {
         repos: [
           {
             name: "owner/sample-repo",
-            base_repo_path: "~/.issue-orchestrator/repos",
+            base_repo_path: "~/.imploid/repos",
           },
         ],
         max_concurrent: 4,
@@ -229,7 +229,7 @@ describe("Config.loadOrCreate", () => {
 
     const parsed = JSON.parse(readFileSync(configPath, "utf8"));
     expect(config.githubToken).toBe("ghp_updated");
-    const expectedBase = resolve(process.env.HOME ?? "", ".issue-orchestrator/repos");
+    const expectedBase = resolve(process.env.HOME ?? "", ".imploid/repos");
     expect(parsed.github.repos).toEqual([
       {
         name: "owner/sample-repo",
@@ -276,7 +276,7 @@ describe("Config.loadOrCreate", () => {
     expect(config.baseRepoPath).toBe("~/legacy-path");
     expect(config.maxConcurrent).toBe(3);
 
-    const expectedBase = resolve(process.env.HOME ?? "", ".issue-orchestrator/repos");
+    const expectedBase = resolve(process.env.HOME ?? "", ".imploid/repos");
     expect(config.getProcessorRepoPath("claude", 2, "owner/legacy-repo")).toBe(
       resolve(expectedBase, "claude", "legacy-repo_agent_2")
     );

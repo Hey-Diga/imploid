@@ -12,7 +12,7 @@ const ACTIVE_STATUSES = new Set<ProcessStatus | string>([
 const DEFAULT_STATE_FILE = (() => {
   const homeDir = process.env.HOME;
   if (homeDir && homeDir.length) {
-    return resolve(homeDir, ".issue-orchestrator", "processing-state.json");
+    return resolve(homeDir, ".imploid", "processing-state.json");
   }
   return resolve(process.cwd(), "processing-state.json");
 })();

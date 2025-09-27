@@ -12,7 +12,7 @@ This project runs on Bun with TypeScript, so we rely on Bun's built-in test runn
   - `Config.loadOrCreate` path handling, including the interactive wizard (stub readline & TTY).
   - `StateManager` persistence and agent slot allocation using temporary files.
   - `GitHubClient` request construction and label updates via mocked `fetch`.
-  - `IssueOrchestrator` control flow when no issues are available, with GitHub/API calls mocked and state captured in a temporary workspace.
+  - `ImploidOrchestrator` control flow when no issues are available, with GitHub/API calls mocked and state captured in a temporary workspace.
 - **Integration tests** (future work): exercise repository cloning and Claude process control against disposable repositories or fixtures. Requires sandbox repo + CLI binaries, so tracked separately.
 
 ## Mocking & Fixtures
