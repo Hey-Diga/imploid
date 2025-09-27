@@ -5,7 +5,6 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist",
     "start": "bun run src/runOrchestrator.ts",
-    "monitor": "bun run src/bin/monitor.ts",
     "test": "bun test"
   },
   "devDependencies": {
