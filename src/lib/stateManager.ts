@@ -118,6 +118,14 @@ export class StateManager {
     return this.getActiveStates().filter((state) => state.processor_name === processorName);
   }
 
+  getActiveIssueNumbers(): number[] {
+    const numbers = new Set<number>();
+    for (const state of this.getActiveStates()) {
+      numbers.add(state.issue_number);
+    }
+    return Array.from(numbers);
+  }
+
   getActiveIssueNumbersByProcessor(processorName: string): number[] {
     const numbers = new Set<number>();
     for (const state of this.getActiveStatesByProcessor(processorName)) {

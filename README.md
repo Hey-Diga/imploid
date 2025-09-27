@@ -62,12 +62,12 @@ bunx issue-orchestrator --config ~/.issue-orchestrator/config.json
 
 1. **State Load** – `~/.issue-orchestrator/processing-state.json` is read to resume in-flight issues.
 2. **Repository Polling** – each configured repo is queried for issues labeled `ready-for-claude`.
-3. **Scheduling** – issues not already running are scheduled until the concurrency budget (`max_concurrent`) is exhausted.
+3. **Scheduling** – up to `max_concurrent` issues run at once. When a slot opens, the orchestrator reserves agent slots for every processor and launches them together on the same issue.
 4. **Processing** –
    - The `RepoManager` fetches/clones worktrees beneath `~/.issue-orchestrator/repos/<processor>/<repo>_agent_<index>` so each processor operates in its own sandbox.
    - The shared prompt from `src/lib/processors/prompt.ts` guides both Claude and Codex CLI runners.
    - Processors stream output, persist session metadata, enforce timeouts, and update state.
-   - Branches are created as `issue-<number>-<processor>` allowing multiple processors to work the same issue concurrently.
+   - Branches are created as `issue-<number>-<processor>` so all processors can work the same issue concurrently without colliding.
 5. **Notifications & Labels** – Slack/Telegram notifiers reflect status changes, while GitHub labels transition from `ready-for-claude` → `claude-working` → `claude-completed`/`claude-failed`.
 
 ### Processors

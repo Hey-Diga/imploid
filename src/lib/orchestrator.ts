@@ -118,52 +118,96 @@ export class IssueOrchestrator {
 
     console.info(`Found ${allIssues.length} total ready issues`);
 
-    for (const processor of this.processors) {
-      await this.runProcessorCycle(processor, allIssues);
-    }
-
+    await this.scheduleIssues(allIssues);
     await this.stateManager.saveStates();
   }
 
-  private async runProcessorCycle(processor: ProcessorDefinition, issues: ExtendedIssue[]): Promise<void> {
-    const activeStates = this.stateManager.getActiveStatesByProcessor(processor.name);
-    const activeIssueNumbers = new Set(activeStates.map((state) => state.issue_number));
-    const availableSlots = this.config.maxConcurrent - activeStates.length;
+  private async scheduleIssues(issues: ExtendedIssue[]): Promise<void> {
+    const activeIssueNumbers = new Set(this.stateManager.getActiveIssueNumbers());
+    let remainingCapacity = this.config.maxConcurrent - activeIssueNumbers.size;
 
-    if (availableSlots <= 0) {
+    if (remainingCapacity <= 0) {
       return;
     }
 
-    const newIssues = issues.filter((issue) => !activeIssueNumbers.has(issue.number));
-    if (!newIssues.length) {
+    const candidateIssues = issues.filter((issue) => !activeIssueNumbers.has(issue.number));
+    if (!candidateIssues.length) {
       return;
     }
 
-    const issuesToProcess = newIssues.slice(0, availableSlots);
-    await Promise.all(issuesToProcess.map((issue) => this.processIssueForProcessor(processor, issue)));
+    const startPromises: Promise<void>[] = [];
+
+    for (const issue of candidateIssues) {
+      if (remainingCapacity <= 0) {
+        break;
+      }
+
+      const allocations = await this.reserveIssueSlots(issue);
+      if (!allocations) {
+        console.warn(`Unable to schedule issue #${issue.number}; no available agent slots for all processors`);
+        continue;
+      }
+
+      activeIssueNumbers.add(issue.number);
+      remainingCapacity -= 1;
+      startPromises.push(this.processIssueAcrossProcessors(issue, allocations));
+    }
+
+    await Promise.all(startPromises);
   }
 
-  private async processIssueForProcessor(processor: ProcessorDefinition, issue: ExtendedIssue): Promise<void> {
-    const availableIndex = this.stateManager.getAvailableAgentIndex(processor.name, this.config.maxConcurrent);
-    if (availableIndex === undefined) {
-      console.warn(`[${processor.displayName}] No available agent slots for issue #${issue.number}`);
-      return;
+  private async reserveIssueSlots(
+    issue: ExtendedIssue
+  ): Promise<Array<{ processor: ProcessorDefinition; agentIndex: number }> | null> {
+    const allocations: Array<{ processor: ProcessorDefinition; agentIndex: number }> = [];
+
+    for (const processor of this.processors) {
+      const agentIndex = this.stateManager.getAvailableAgentIndex(processor.name, this.config.maxConcurrent);
+      if (agentIndex === undefined) {
+        return null;
+      }
+      allocations.push({ processor, agentIndex });
     }
 
     const repoName = issue.repo_name ?? this.config.githubRepo;
-    const state = new IssueState({
-      issue_number: issue.number,
-      status: ProcessStatus.Running,
-      branch: `issue-${issue.number}-${processor.name}`,
-      start_time: new Date().toISOString(),
-      agent_index: availableIndex,
-      repo_name: repoName,
-      processor_name: processor.name,
-      session_id: null,
-    });
+    for (const { processor, agentIndex } of allocations) {
+      const state = new IssueState({
+        issue_number: issue.number,
+        status: ProcessStatus.Running,
+        branch: `issue-${issue.number}-${processor.name}`,
+        start_time: new Date().toISOString(),
+        agent_index: agentIndex,
+        repo_name: repoName,
+        processor_name: processor.name,
+        session_id: null,
+      });
+      this.stateManager.setState(issue.number, processor.name, state);
+    }
 
-    this.stateManager.setState(issue.number, processor.name, state);
     await this.stateManager.saveStates();
+    return allocations;
+  }
+
+  private async processIssueAcrossProcessors(
+    issue: ExtendedIssue,
+    allocations: Array<{ processor: ProcessorDefinition; agentIndex: number }>
+  ): Promise<void> {
+    await Promise.all(
+      allocations.map(({ processor, agentIndex }) => this.processIssueForProcessor(processor, issue, agentIndex))
+    );
+  }
+
+  private async processIssueForProcessor(
+    processor: ProcessorDefinition,
+    issue: ExtendedIssue,
+    agentIndex: number
+  ): Promise<void> {
+    const repoName = issue.repo_name ?? this.config.githubRepo;
+    let state = this.stateManager.getState(issue.number, processor.name);
+    if (!state) {
+      console.error(`State not found for issue #${issue.number} and processor ${processor.name}`);
+      return;
+    }
 
     try {
       await this.githubClient.updateIssueLabels(issue.number, {
@@ -180,22 +224,22 @@ export class IssueOrchestrator {
         )
       );
 
-      const result = await processor.runner.processIssue(issue.number, availableIndex, this.stateManager, repoName);
-      const currentState = this.stateManager.getState(issue.number, processor.name);
+      const result = await processor.runner.processIssue(issue.number, agentIndex, this.stateManager, repoName);
+      state = this.stateManager.getState(issue.number, processor.name);
 
-      if (currentState) {
+      if (state) {
         if (result.sessionId) {
-          currentState.session_id = result.sessionId;
+          state.session_id = result.sessionId;
         }
-        currentState.status = result.status;
-        currentState.end_time = new Date().toISOString();
-        this.stateManager.setState(issue.number, processor.name, currentState);
+        state.status = result.status;
+        state.end_time = new Date().toISOString();
+        this.stateManager.setState(issue.number, processor.name, state);
         await this.stateManager.saveStates();
       }
 
-      if (result.status === ProcessStatus.Completed && currentState?.start_time && currentState?.end_time) {
-        const start = new Date(currentState.start_time);
-        const end = new Date(currentState.end_time);
+      if (result.status === ProcessStatus.Completed && state?.start_time && state?.end_time) {
+        const start = new Date(state.start_time);
+        const end = new Date(state.end_time);
         const durationSeconds = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000));
         const duration = `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`;
 
@@ -214,12 +258,12 @@ export class IssueOrchestrator {
 
         this.stateManager.removeState(issue.number, processor.name);
         await this.stateManager.saveStates();
-      } else if (result.status === ProcessStatus.NeedsInput && currentState?.last_output) {
+      } else if (result.status === ProcessStatus.NeedsInput && state?.last_output) {
         await Promise.all(
           this.notifiers.map((notifier) =>
             isSlackNotifier(notifier)
-              ? notifier.notifyNeedsInput(issue.number, currentState.last_output ?? "", repoName)
-              : notifier.notifyNeedsInput(issue.number, currentState.last_output ?? "")
+              ? notifier.notifyNeedsInput(issue.number, state.last_output ?? "", repoName)
+              : notifier.notifyNeedsInput(issue.number, state.last_output ?? "")
           )
         );
       } else if (result.status === ProcessStatus.Failed) {

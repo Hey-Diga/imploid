@@ -71,6 +71,15 @@ describe("IssueOrchestrator", () => {
       initialize: mock(async () => {}),
       saveStates: mock(async () => {}),
       getActiveStatesByProcessor: mock(() => []),
+      getActiveIssueNumbers: mock(() => {
+        const numbers = new Set<number>();
+        store.forEach((state) => {
+          if (state.status === ProcessStatus.Running || state.status === ProcessStatus.NeedsInput) {
+            numbers.add(state.issue_number);
+          }
+        });
+        return Array.from(numbers);
+      }),
       getAvailableAgentIndex: mock(() => 0),
       setState: mock((issue: number, processor: string, state: IssueState) => {
         store.set(`${issue}:${processor}`, state);
@@ -82,18 +91,20 @@ describe("IssueOrchestrator", () => {
     };
   };
 
-  const createSingleProcessor = (runnerMock: any) => ({
-    name: "claude",
-    displayName: "Claude",
+  const createProcessor = (name: string, displayName: string, runnerMock: any) => ({
+    name,
+    displayName,
     labels: {
-      working: "claude-working",
-      completed: "claude-completed",
-      failed: "claude-failed",
+      working: `${name}-working`,
+      completed: `${name}-completed`,
+      failed: `${name}-failed`,
     },
     runner: {
       processIssue: runnerMock,
     },
   });
+
+  const createSingleProcessor = (runnerMock: any) => createProcessor("claude", "Claude", runnerMock);
 
   test("runs without processing when no issues are returned", async () => {
     const baseRepoPath = resolve(tempDir, "repos");
@@ -207,5 +218,42 @@ describe("IssueOrchestrator", () => {
       remove: ["claude-working", "ready-for-claude"],
     });
     expect(stateManagerStub.removeState.mock.calls.length).toBe(1);
+  });
+
+  test("schedules each issue once and runs all processors concurrently", async () => {
+    const baseRepoPath = resolve(tempDir, "repos");
+    const config = createStubConfig(baseRepoPath);
+    const orchestrator = new IssueOrchestrator(config as any);
+    const orchestratorAny = orchestrator as any;
+
+    const stateManagerStub = createStateManagerStub();
+    orchestratorAny.stateManager = stateManagerStub;
+
+    const claudeRunner = mock(async () => ({ status: ProcessStatus.Completed }));
+    const codexRunner = mock(async () => ({ status: ProcessStatus.Completed }));
+
+    orchestratorAny.processors = [
+      createProcessor("claude", "Claude", claudeRunner),
+      createProcessor("codex", "Codex", codexRunner),
+    ];
+
+    orchestratorAny.githubClient = {
+      getReadyIssues: mock(async () => [{ number: 303, title: "Dual run", labels: [] }]),
+      updateIssueLabels: mock(async () => {}),
+    };
+
+    orchestratorAny.notifiers = [];
+
+    await orchestrator.run();
+
+    const processorsUpdated = new Set(stateManagerStub.setState.mock.calls.map(([, processor]) => processor));
+    expect(Array.from(processorsUpdated).sort()).toEqual(["claude", "codex"]);
+    expect(claudeRunner.mock.calls.length).toBe(1);
+    expect(codexRunner.mock.calls.length).toBe(1);
+    expect(claudeRunner.mock.calls[0][0]).toBe(303);
+    expect(claudeRunner.mock.calls[0][1]).toBe(0);
+    expect(codexRunner.mock.calls[0][0]).toBe(303);
+    expect(codexRunner.mock.calls[0][1]).toBe(0);
+    expect(stateManagerStub.getActiveIssueNumbers.mock.calls.length).toBeGreaterThan(0);
   });
 });
