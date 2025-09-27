@@ -1,0 +1,14 @@
+{
+  "name": "issue-orchestrator",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist",
+    "start": "bun run src/runOrchestrator.ts",
+    "monitor": "bun run src/bin/monitor.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.19"
+  }
+}

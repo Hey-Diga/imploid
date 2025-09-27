@@ -1,0 +1,14 @@
+# Node/Bun artifacts
+node_modules/
+dist/
+
+# Configuration and state
+config.json
+processing-state.json
+
+# OS and editor noise
+.DS_Store
+*.log
+
+# Python virtual environments
+python/venv/
