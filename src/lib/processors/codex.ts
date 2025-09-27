@@ -34,8 +34,8 @@ export class CodexProcessor {
 
     const codexArgs = [
       this.config.codexPath,
+      "exec",
       "--full-auto",
-      "--prompt",
       commandPrompt,
     ];
 

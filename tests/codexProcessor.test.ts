@@ -125,8 +125,9 @@ describe("CodexProcessor", () => {
     expect(result.status).toBe(ProcessStatus.Completed);
     const spawnArgs = spawnProcessMock.mock.calls[0][0];
     expect(spawnArgs[0]).toBe("/usr/local/bin/codex");
-    expect(spawnArgs).toContain("--full-auto");
-    expect(spawnArgs).toContain("--prompt");
+    expect(spawnArgs[1]).toBe("exec");
+    expect(spawnArgs[2]).toBe("--full-auto");
+    expect(typeof spawnArgs[3]).toBe("string");
     const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
     expect(commands).toContain("git checkout -B issue-42-codex");
     expect(commands).toContain("git status --porcelain");
