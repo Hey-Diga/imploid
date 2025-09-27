@@ -100,7 +100,6 @@ describe("Config.loadOrCreate", () => {
       { githubToken: "ghp_wizard_token" },
       { organization: "__personal__" },
       { repositories: ["owner/sample-repo"] },
-      { baseDir: "~/worktrees" },
       { maxConcurrent: "2" },
       { configureTelegram: false },
       { configureSlack: true },
@@ -137,7 +136,7 @@ describe("Config.loadOrCreate", () => {
     expect(existsSync(configPath)).toBe(true);
     const parsed = JSON.parse(readFileSync(configPath, "utf8"));
     expect(parsed.github.repos[0].name).toBe("owner/sample-repo");
-    expect(config.githubRepos[0].base_repo_path).toBe(resolve(process.env.HOME ?? "", "worktrees"));
+    expect(config.githubRepos[0].base_repo_path).toBe(resolve(process.env.HOME ?? "", ".issue-orchestrator/repos"));
     expect(config.maxConcurrent).toBe(2);
     expect(config.slackBotToken).toBe("xoxb-test-token");
     expect(config.slackChannelId).toBe("C123456");
@@ -155,7 +154,7 @@ describe("Config.loadOrCreate", () => {
         repos: [
           {
             name: "owner/sample-repo",
-            base_repo_path: "~/worktrees",
+            base_repo_path: "~/.issue-orchestrator/repos",
           },
         ],
         max_concurrent: 4,
@@ -182,7 +181,6 @@ describe("Config.loadOrCreate", () => {
       { repositories: ["owner/sample-repo", "__manual__"] },
       { repo: "owner/extra-repo" },
       { repo: "" },
-      { baseDir: "~/updated-worktrees" },
       { maxConcurrent: "5" },
       { configureTelegram: true },
       { telegramBotToken: "new-telegram" },
@@ -212,14 +210,15 @@ describe("Config.loadOrCreate", () => {
 
     const parsed = JSON.parse(readFileSync(configPath, "utf8"));
     expect(config.githubToken).toBe("ghp_updated");
+    const expectedBase = resolve(process.env.HOME ?? "", ".issue-orchestrator/repos");
     expect(parsed.github.repos).toEqual([
       {
         name: "owner/sample-repo",
-        base_repo_path: resolve(process.env.HOME ?? "", "updated-worktrees"),
+        base_repo_path: expectedBase,
       },
       {
         name: "owner/extra-repo",
-        base_repo_path: resolve(process.env.HOME ?? "", "updated-worktrees"),
+        base_repo_path: expectedBase,
       },
     ]);
     expect(config.maxConcurrent).toBe(5);

@@ -37,6 +37,9 @@ const DEFAULT_MAX_CONCURRENT = 3;
 const DEFAULT_TIMEOUT_SECONDS = 3600;
 const DEFAULT_CHECK_INTERVAL = 5;
 const DEFAULT_CLAUDE_BIN = "claude";
+const DEFAULT_BASE_DIR = "~/.issue-orchestrator";
+const DEFAULT_CONFIG_PATH = `${DEFAULT_BASE_DIR}/config.json`;
+const DEFAULT_REPOS_DIR = `${DEFAULT_BASE_DIR}/repos`;
 
 function expandHomePath(input: string): string {
   if (input.startsWith("~/")) {
@@ -45,14 +48,9 @@ function expandHomePath(input: string): string {
   return input;
 }
 
-function resolveConfigPath(configPath: string): string {
-  const expanded = expandHomePath(configPath);
-  if (expanded.startsWith("/")) {
-    return expanded;
-  }
-  const __filename = fileURLToPath(import.meta.url);
-  const libDir = dirname(__filename);
-  return resolve(libDir, "..", expanded);
+function resolveConfigPath(configPath?: string): string {
+  const target = configPath ?? DEFAULT_CONFIG_PATH;
+  return expandHomePath(target);
 }
 
 interface GitHubRepoSummary {
@@ -333,23 +331,14 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
     throw new Error("At least one repository must be configured.");
   }
 
-  const existingBaseDir = existingRepos[0]?.base_repo_path ?? "~/.issue-orchestrator/repos";
-  const { baseDir } = await inquirer.prompt<{ baseDir: string }>([
-    {
-      type: "input",
-      name: "baseDir",
-      message: "Base directory for agent worktrees",
-      default: existingBaseDir,
-      filter: (value: string) => value.trim(),
-      validate: (value: string) => (value.trim().length ? true : "Base directory is required."),
-    },
-  ]);
-  const baseRepoPath = expandHomePath(baseDir);
+  const baseRepoPath = expandHomePath(DEFAULT_REPOS_DIR);
 
   const repos: GitHubRepoConfig[] = uniqueRepos.map((name) => ({
     name,
     base_repo_path: baseRepoPath,
   }));
+
+  await mkdir(baseRepoPath, { recursive: true }).catch(() => undefined);
 
   const existingMaxConcurrent = existing?.github?.max_concurrent ?? DEFAULT_MAX_CONCURRENT;
   const { maxConcurrent } = await inquirer.prompt<{ maxConcurrent: string }>([
@@ -544,7 +533,7 @@ async function loadRawConfig(configPath: string): Promise<RawConfig> {
 export class Config {
   private constructor(private readonly configPath: string, private readonly config: RawConfig) {}
 
-  static async loadOrCreate(configPath = "config.json"): Promise<Config> {
+  static async loadOrCreate(configPath?: string): Promise<Config> {
     const resolved = resolveConfigPath(configPath);
     const raw = await loadRawConfig(resolved);
     return new Config(resolved, raw);
@@ -629,7 +618,7 @@ export class Config {
   }
 }
 
-export async function configureInteractive(configPath = "config.json"): Promise<Config> {
+export async function configureInteractive(configPath?: string): Promise<Config> {
   const resolved = resolveConfigPath(configPath);
   const existing = await readRawConfigIfExists(resolved);
   const updated = await interactiveConfigure(resolved, existing);
