@@ -2,33 +2,24 @@ import { Config } from "../config";
 import { RepoManager } from "../repoManager";
 import { ProcessStatus } from "../models";
 import { StateManager } from "../stateManager";
-import { runCommand, spawnProcess } from "../../utils/process";
-import { SlackNotifier } from "../../notifiers/slackNotifier";
-import { TelegramNotifier } from "../../notifiers/telegramNotifier";
+import { spawnProcess } from "../../utils/process";
+
+
 
 import { buildIssuePrompt } from "./prompt";
+import { ProcessorNotifier, prepareIssueWorkspace, broadcastProcessorError } from "./shared";
 
-export type CodexNotifier = SlackNotifier | TelegramNotifier;
+export type CodexNotifier = ProcessorNotifier;
 
 export class CodexProcessor {
   private readonly config: Config;
-  private readonly notifiers: CodexNotifier[];
+  private readonly notifiers: ProcessorNotifier[];
   private readonly repoManager: RepoManager;
 
-  constructor(config: Config, notifiers: CodexNotifier[], repoManager: RepoManager) {
+  constructor(config: Config, notifiers: ProcessorNotifier[], repoManager: RepoManager) {
     this.config = config;
     this.notifiers = notifiers;
     this.repoManager = repoManager;
-  }
-
-  private async sendError(issueNumber: number, message: string, lastOutput?: string, repoName?: string) {
-    await Promise.all(
-      this.notifiers.map((notifier) =>
-        notifier instanceof SlackNotifier
-          ? notifier.notifyError(issueNumber, message, lastOutput, repoName)
-          : notifier.notifyError(issueNumber, message, lastOutput)
-      )
-    ).catch((error) => console.error("Failed to send Codex error notification", error));
   }
 
   async processIssue(
@@ -37,37 +28,7 @@ export class CodexProcessor {
     stateManager: StateManager,
     repoName?: string
   ): Promise<{ status: ProcessStatus; sessionId?: string | null }> {
-    const repoPath = await this.repoManager.ensureRepoClone(agentIndex, repoName);
-    const branchName = `issue-${issueNumber}`;
-
-    const branchCheck = await runCommand(["git", "show-ref", "--verify", "--quiet", `refs/heads/${branchName}`], {
-      cwd: repoPath,
-    });
-    if (branchCheck.code === 0) {
-      const checkout = await runCommand(["git", "checkout", branchName], { cwd: repoPath });
-      if (checkout.code !== 0) {
-        throw new Error(`Failed to checkout branch: ${checkout.stderr}`);
-      }
-    } else {
-      const create = await runCommand(["git", "checkout", "-b", branchName], { cwd: repoPath });
-      if (create.code !== 0) {
-        throw new Error(`Failed to create branch: ${create.stderr}`);
-      }
-    }
-
-    const currentBranch = await runCommand(["git", "branch", "--show-current"], { cwd: repoPath });
-    if (currentBranch.code !== 0) {
-      throw new Error(`Failed to get current branch: ${currentBranch.stderr}`);
-    }
-
-    if (currentBranch.stdout.trim() !== branchName) {
-      throw new Error(`Expected to be on branch ${branchName}, but currently on ${currentBranch.stdout.trim()}`);
-    }
-
-    const ready = await this.repoManager.validateBranchReady(repoPath, branchName);
-    if (!ready) {
-      throw new Error(`Branch ${branchName} is not ready for processing`);
-    }
+    const { repoPath } = await prepareIssueWorkspace(this.repoManager, issueNumber, agentIndex, repoName);
 
     const commandPrompt = buildIssuePrompt(issueNumber);
 
@@ -129,7 +90,8 @@ export class CodexProcessor {
 
       if (Date.now() - start > timeoutMs) {
         process.kill();
-        await this.sendError(
+        await broadcastProcessorError(
+          this.notifiers,
           issueNumber,
           `Codex process timed out after ${this.config.codexTimeout} seconds`,
           lastOutput,
@@ -146,7 +108,8 @@ export class CodexProcessor {
       return { status: ProcessStatus.Completed, sessionId: null };
     }
 
-    await this.sendError(
+    await broadcastProcessorError(
+      this.notifiers,
       issueNumber,
       stderrBuffer || "Unknown error",
       lastOutput,
