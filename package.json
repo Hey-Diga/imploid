@@ -1,6 +1,6 @@
 {
   "name": "imploid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Automates the implementation leg of agentic coding by orchestrating Claude and Codex processors to clone, branch, and work GitHub issues in parallel.",
   "license": "MIT",
   "type": "module",
