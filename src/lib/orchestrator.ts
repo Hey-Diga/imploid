@@ -10,6 +10,7 @@ import { CodexProcessor } from "./processors/codex";
 import { ProcessorNotifier } from "./processors/shared";
 import { SlackNotifier } from "../notifiers/slackNotifier";
 import { TelegramNotifier } from "../notifiers/telegramNotifier";
+import { createIssueBranchName } from "../utils/branch";
 
 interface ExtendedIssue extends GitHubIssue {
   repo_name?: string;
@@ -171,10 +172,11 @@ export class ImploidOrchestrator {
 
     const repoName = issue.repo_name ?? this.config.githubRepo;
     for (const { processor, agentIndex } of allocations) {
+      const branchName = createIssueBranchName(issue.number, processor.name);
       const state = new IssueState({
         issue_number: issue.number,
         status: ProcessStatus.Running,
-        branch: `issue-${issue.number}-${processor.name}`,
+        branch: branchName,
         start_time: new Date().toISOString(),
         agent_index: agentIndex,
         repo_name: repoName,

@@ -2,6 +2,7 @@ import { runCommand } from "../../utils/process";
 import { RepoManager } from "../repoManager";
 import { SlackNotifier } from "../../notifiers/slackNotifier";
 import { TelegramNotifier } from "../../notifiers/telegramNotifier";
+import { createIssueBranchName } from "../../utils/branch";
 
 export type ProcessorNotifier = SlackNotifier | TelegramNotifier;
 
@@ -10,19 +11,20 @@ export async function prepareIssueWorkspace(
   processorName: string,
   issueNumber: number,
   agentIndex: number,
-  repoName?: string
+  repoName?: string,
+  branchName?: string
 ): Promise<{ repoPath: string; branchName: string }> {
   const repoPath = await repoManager.ensureRepoClone(processorName, agentIndex, repoName);
-  const branchName = `issue-${issueNumber}-${processorName}`;
+  const effectiveBranchName = branchName ?? createIssueBranchName(issueNumber, processorName);
 
   const baseBranch = await repoManager.prepareDefaultBranch(repoPath);
   console.info(
-    `[${processorName}] Preparing issue branch ${branchName} from ${baseBranch} for agent ${agentIndex} at ${repoPath}`
+    `[${processorName}] Preparing issue branch ${effectiveBranchName} from ${baseBranch} for agent ${agentIndex} at ${repoPath}`
   );
 
-  const checkoutResult = await runCommand(["git", "checkout", "-B", branchName], { cwd: repoPath });
+  const checkoutResult = await runCommand(["git", "checkout", "-B", effectiveBranchName], { cwd: repoPath });
   if (checkoutResult.code !== 0) {
-    throw new Error(`Failed to create branch ${branchName}: ${checkoutResult.stderr}`);
+    throw new Error(`Failed to create branch ${effectiveBranchName}: ${checkoutResult.stderr}`);
   }
 
   const statusResult = await runCommand(["git", "status", "--porcelain"], { cwd: repoPath });
@@ -31,10 +33,10 @@ export async function prepareIssueWorkspace(
   }
 
   if (statusResult.stdout.trim().length) {
-    throw new Error(`Repository is not clean after preparing branch ${branchName}: ${statusResult.stdout.trim()}`);
+    throw new Error(`Repository is not clean after preparing branch ${effectiveBranchName}: ${statusResult.stdout.trim()}`);
   }
 
-  return { repoPath, branchName };
+  return { repoPath, branchName: effectiveBranchName };
 }
 
 export async function broadcastProcessorError(

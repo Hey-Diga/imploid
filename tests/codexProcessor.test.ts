@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import { ProcessStatus, IssueState } from "../src/lib/models";
+import { createIssueBranchName } from "../src/utils/branch";
 
 type CommandResult = { code: number; stdout: string; stderr: string };
 type SpawnResult = {
@@ -64,22 +65,25 @@ describe("CodexProcessor", () => {
   });
 
   const makeStateManager = (issueNumber: number) => {
+    const key = (issue: number, processor: string) => `${issue}:${processor}`;
+    const branch = createIssueBranchName(issueNumber, "codex", new Date(Date.UTC(2024, 0, 1, 0, 0, issueNumber % 60)));
     const state = new IssueState({
       issue_number: issueNumber,
       processor_name: "codex",
       status: ProcessStatus.Running,
-      branch: `issue-${issueNumber}-codex`,
+      branch,
       start_time: new Date().toISOString(),
     });
-    const store = new Map<number, IssueState>([[issueNumber, state]]);
+    const store = new Map<string, IssueState>([[key(issueNumber, "codex"), state]]);
     return {
-      getState: mock((id: number) => store.get(id)),
-      setState: mock((id: number, next: IssueState) => {
-        store.set(id, next);
+      branch,
+      getState: mock((issue: number, processor: string) => store.get(key(issue, processor))),
+      setState: mock((issue: number, processor: string, next: IssueState) => {
+        store.set(key(issue, processor), next);
       }),
       saveStates: mock(async () => {}),
-      removeState: mock((id: number) => {
-        store.delete(id);
+      removeState: mock((issue: number, processor: string) => {
+        store.delete(key(issue, processor));
       }),
       store,
     };
@@ -97,6 +101,7 @@ describe("CodexProcessor", () => {
   test("runs codex CLI with expected arguments and completes", async () => {
     const { CodexProcessor } = await import("../src/lib/processors/codex");
     const stateManager = makeStateManager(42);
+    const { branch } = stateManager;
     const repoManager = makeRepoManager("/tmp/repo");
     const notifier = { notifyError: mock(async () => {}) };
 
@@ -130,7 +135,7 @@ describe("CodexProcessor", () => {
     expect(spawnArgs[3]).toBe("--dangerously-bypass-approvals-and-sandbox");
     expect(typeof spawnArgs[4]).toBe("string");
     const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
-    expect(commands).toContain("git checkout -B issue-42-codex");
+    expect(commands).toContain(`git checkout -B ${branch}`);
     expect(commands).toContain("git status --porcelain");
     expect(repoManager.prepareDefaultBranch.mock.calls[0][0]).toBe("/tmp/repo");
     expect(notifier.notifyError.mock.calls.length).toBe(0);
@@ -139,6 +144,7 @@ describe("CodexProcessor", () => {
   test("reports failure and notifies on non-zero exit", async () => {
     const { CodexProcessor } = await import("../src/lib/processors/codex");
     const stateManager = makeStateManager(101);
+    const { branch } = stateManager;
     const repoManager = makeRepoManager("/tmp/repo");
     const notifier = { notifyError: mock(async () => {}) };
 
@@ -166,7 +172,7 @@ describe("CodexProcessor", () => {
 
     expect(result.status).toBe(ProcessStatus.Failed);
     const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
-    expect(commands).toContain("git checkout -B issue-101-codex");
+    expect(commands).toContain(`git checkout -B ${branch}`);
     expect(commands).toContain("git status --porcelain");
     expect(notifier.notifyError.mock.calls.length).toBe(1);
     expect(notifier.notifyError.mock.calls[0][1]).toContain("failure");
@@ -175,6 +181,7 @@ describe("CodexProcessor", () => {
   test("kills codex process when timeout elapses", async () => {
     const { CodexProcessor } = await import("../src/lib/processors/codex");
     const stateManager = makeStateManager(11);
+    const { branch } = stateManager;
     const repoManager = makeRepoManager("/tmp/repo");
     const notifier = { notifyError: mock(async () => {}) };
 
@@ -206,7 +213,7 @@ describe("CodexProcessor", () => {
 
     expect(result.status).toBe(ProcessStatus.Failed);
     const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
-    expect(commands).toContain("git checkout -B issue-11-codex");
+    expect(commands).toContain(`git checkout -B ${branch}`);
     expect(commands).toContain("git status --porcelain");
     expect(killed).toBe(true);
     expect(notifier.notifyError.mock.calls.length).toBe(1);

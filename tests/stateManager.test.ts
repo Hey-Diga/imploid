@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { StateManager } from "../src/lib/stateManager";
 import { IssueState, ProcessStatus } from "../src/lib/models";
+import { createIssueBranchName } from "../src/utils/branch";
 
 describe("StateManager", () => {
   let tempDir: string;
@@ -18,12 +19,15 @@ describe("StateManager", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  const issueBranch = (issue: number, processor: string) =>
+    createIssueBranchName(issue, processor, new Date(Date.UTC(2024, 0, 1, 0, 0, issue % 60)));
+
   const createState = (issue: number, processor: string, agent: number) =>
     new IssueState({
       issue_number: issue,
       processor_name: processor,
       status: ProcessStatus.Running,
-      branch: `issue-${issue}-${processor}`,
+      branch: issueBranch(issue, processor),
       start_time: new Date().toISOString(),
       agent_index: agent,
     });
@@ -39,7 +43,7 @@ describe("StateManager", () => {
     const reloaded = new StateManager(statePath);
     await reloaded.initialize();
 
-    expect(reloaded.getState(1, "claude")?.branch).toBe("issue-1-claude");
+    expect(reloaded.getState(1, "claude")?.branch).toBe(issueBranch(1, "claude"));
     expect(reloaded.getState(1, "codex")?.agent_index).toBe(1);
     expect(reloaded.getActiveIssueNumbersByProcessor("claude")).toEqual([1]);
     expect(reloaded.getActiveIssueNumbersByProcessor("codex")).toEqual([1]);
@@ -69,7 +73,7 @@ describe("StateManager", () => {
         issue_number: issue,
         processor_name: processor,
         status,
-        branch: `issue-${issue}-${processor}`,
+        branch: issueBranch(issue, processor),
         start_time: new Date().toISOString(),
         agent_index: agent,
       });

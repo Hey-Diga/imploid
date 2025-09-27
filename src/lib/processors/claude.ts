@@ -3,6 +3,7 @@ import { RepoManager } from "../repoManager";
 import { ProcessStatus } from "../models";
 import { StateManager } from "../stateManager";
 import { spawnProcess } from "../../utils/process";
+import { createIssueBranchName } from "../../utils/branch";
 
 import { buildIssuePrompt } from "./prompt";
 import { ProcessorNotifier, prepareIssueWorkspace, broadcastProcessorError } from "./shared";
@@ -28,7 +29,16 @@ export class ClaudeProcessor {
     stateManager: StateManager,
     repoName?: string
   ): Promise<{ status: ProcessStatus; sessionId?: string | null }> {
-    const { repoPath } = await prepareIssueWorkspace(this.repoManager, PROCESSOR_NAME, issueNumber, agentIndex, repoName);
+    const existingState = stateManager.getState(issueNumber, PROCESSOR_NAME);
+    const branchName = existingState?.branch ?? createIssueBranchName(issueNumber, PROCESSOR_NAME);
+    const { repoPath } = await prepareIssueWorkspace(
+      this.repoManager,
+      PROCESSOR_NAME,
+      issueNumber,
+      agentIndex,
+      repoName,
+      branchName
+    );
 
     const commandPrompt = buildIssuePrompt(issueNumber);
 
@@ -66,10 +76,10 @@ export class ClaudeProcessor {
             const data = JSON.parse(line);
             if (!sessionId && (data.session_id || data.sessionId)) {
               sessionId = data.session_id ?? data.sessionId;
-              const state = stateManager.getState(issueNumber);
+              const state = stateManager.getState(issueNumber, PROCESSOR_NAME);
               if (state) {
                 state.session_id = sessionId;
-                stateManager.setState(issueNumber, state);
+                stateManager.setState(issueNumber, PROCESSOR_NAME, state);
                 await stateManager.saveStates();
               }
             }

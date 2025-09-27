@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import { ProcessStatus, IssueState } from "../src/lib/models";
+import { createIssueBranchName } from "../src/utils/branch";
 
 type CommandResult = { code: number; stdout: string; stderr: string };
 type SpawnResult = {
@@ -66,17 +67,19 @@ describe("ClaudeProcessor", () => {
   });
 
   const makeStateManager = (issueNumber: number) => {
+    const branch = createIssueBranchName(issueNumber, "claude", new Date(Date.UTC(2024, 0, 1, 0, 0, issueNumber % 60)));
     const state = new IssueState({
       issue_number: issueNumber,
       processor_name: "claude",
       status: ProcessStatus.Running,
-      branch: `issue-${issueNumber}-claude`,
+      branch,
       start_time: new Date().toISOString(),
     });
     const store = new Map<number, IssueState>([[issueNumber, state]]);
     return {
+      branch,
       getState: mock((id: number) => store.get(id)),
-      setState: mock((id: number, next: IssueState) => {
+      setState: mock((id: number, _processor: string, next: IssueState) => {
         store.set(id, next);
       }),
       saveStates: mock(async () => {}),
@@ -101,6 +104,7 @@ describe("ClaudeProcessor", () => {
     const issueNumber = 321;
     const repoPath = "/tmp/repo";
     const stateManager = makeStateManager(issueNumber);
+    const { branch } = stateManager;
     const repoManager = makeRepoManager(repoPath);
     const notifier = { notifyError: mock(async () => {}) };
 
@@ -132,7 +136,7 @@ describe("ClaudeProcessor", () => {
 
     expect(result).toEqual({ status: ProcessStatus.Completed, sessionId: `sess-${issueNumber}` });
     expect(repoManager.prepareDefaultBranch.mock.calls[0][0]).toBe(repoPath);
-    expect(commands).toContain("git checkout -B issue-321-claude");
+    expect(commands).toContain(`git checkout -B ${branch}`);
     expect(commands).toContain("git status --porcelain");
     expect(repoManager.ensureRepoClone.mock.calls[0][0]).toBe("claude");
     expect(repoManager.ensureRepoClone.mock.calls[0][1]).toBe(0);
