@@ -2,7 +2,15 @@ import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
-const spawnSyncMock = mock(() => ({ status: 0, stdout: "/usr/local/bin/claude\n", stderr: "" }));
+const spawnSyncMock = mock((cmd?: string[]) => {
+  if (cmd && Array.isArray(cmd) && cmd[0] === "which" && cmd[1] === "codex") {
+    return { status: 0, stdout: "/usr/local/bin/codex\n", stderr: "" };
+  }
+  if (cmd && Array.isArray(cmd) && cmd[0] === "which" && cmd[1] === "claude") {
+    return { status: 0, stdout: "/usr/local/bin/claude\n", stderr: "" };
+  }
+  return { status: 0, stdout: "", stderr: "" };
+});
 
 let promptResponses: Array<Record<string, unknown>> = [];
 
@@ -107,7 +115,10 @@ describe("Config.loadOrCreate", () => {
       { slackChannelId: "C123456" },
       { claudePath: "/usr/local/bin/claude" },
       { claudeTimeout: "7200" },
-      { claudeCheckInterval: "12" }
+      { claudeCheckInterval: "12" },
+      { codexPath: "/usr/local/bin/codex" },
+      { codexTimeout: "7200" },
+      { codexCheckInterval: "12" }
     );
 
     global.fetch = mock(async (input: RequestInfo) => {
@@ -172,6 +183,11 @@ describe("Config.loadOrCreate", () => {
         timeout_seconds: 500,
         check_interval: 10,
       },
+      codex: {
+        path: "/usr/local/bin/codex",
+        timeout_seconds: 600,
+        check_interval: 12,
+      },
     };
     writeFileSync(configPath, JSON.stringify(existingPayload, null, 2));
 
@@ -188,7 +204,10 @@ describe("Config.loadOrCreate", () => {
       { configureSlack: false },
       { claudePath: "/opt/claude" },
       { claudeTimeout: "3600" },
-      { claudeCheckInterval: "15" }
+      { claudeCheckInterval: "15" },
+      { codexPath: "/usr/local/bin/codex" },
+      { codexTimeout: "1800" },
+      { codexCheckInterval: "20" }
     );
 
     global.fetch = mock(async (input: RequestInfo) => {
@@ -228,6 +247,9 @@ describe("Config.loadOrCreate", () => {
     expect(config.claudePath).toBe("/opt/claude");
     expect(config.claudeTimeout).toBe(3600);
     expect(config.claudeCheckInterval).toBe(15);
+    expect(config.codexPath).toBe("/usr/local/bin/codex");
+    expect(config.codexTimeout).toBe(1800);
+    expect(config.codexCheckInterval).toBe(20);
   });
 
   test("derives repository list from legacy single repo fields", async () => {

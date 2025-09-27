@@ -31,12 +31,18 @@ export interface RawConfig {
     check_interval?: number;
     path?: string;
   };
+  codex?: {
+    timeout_seconds?: number;
+    check_interval?: number;
+    path?: string;
+  };
 }
 
 const DEFAULT_MAX_CONCURRENT = 3;
 const DEFAULT_TIMEOUT_SECONDS = 3600;
 const DEFAULT_CHECK_INTERVAL = 5;
 const DEFAULT_CLAUDE_BIN = "claude";
+const DEFAULT_CODEX_BIN = "codex";
 const DEFAULT_BASE_DIR = "~/.issue-orchestrator";
 const DEFAULT_CONFIG_PATH = `${DEFAULT_BASE_DIR}/config.json`;
 const DEFAULT_REPOS_DIR = `${DEFAULT_BASE_DIR}/repos`;
@@ -479,6 +485,52 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
   ]);
   const claudeCheckIntervalValue = Math.max(1, Math.round(Number(claudeCheckInterval)));
 
+  const codexWhich = spawnSync("which", ["codex"], { encoding: "utf8" });
+  const codexDetected = codexWhich.status === 0 ? codexWhich.stdout.trim() : "";
+  const codexDefault = existing?.codex?.path ?? (codexDetected || DEFAULT_CODEX_BIN);
+
+  const { codexPath } = await inquirer.prompt<{ codexPath: string }>([
+    {
+      type: "input",
+      name: "codexPath",
+      message: "Codex CLI path",
+      default: codexDefault,
+      filter: (value: string) => value.trim(),
+      validate: (value: string) => (value.trim().length ? true : "Codex path is required."),
+    },
+  ]);
+  const resolvedCodexPath = expandHomePath(codexPath || codexDefault);
+
+  const existingCodexTimeout = existing?.codex?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
+  const { codexTimeout } = await inquirer.prompt<{ codexTimeout: string }>([
+    {
+      type: "input",
+      name: "codexTimeout",
+      message: "Codex run timeout in seconds",
+      default: String(existingCodexTimeout),
+      validate: (value: string) => {
+        const parsed = Number(value);
+        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+      },
+    },
+  ]);
+  const codexTimeoutValue = Math.max(1, Math.round(Number(codexTimeout)));
+
+  const existingCodexInterval = existing?.codex?.check_interval ?? DEFAULT_CHECK_INTERVAL;
+  const { codexCheckInterval } = await inquirer.prompt<{ codexCheckInterval: string }>([
+    {
+      type: "input",
+      name: "codexCheckInterval",
+      message: "Codex status check interval (seconds)",
+      default: String(existingCodexInterval),
+      validate: (value: string) => {
+        const parsed = Number(value);
+        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+      },
+    },
+  ]);
+  const codexCheckIntervalValue = Math.max(1, Math.round(Number(codexCheckInterval)));
+
   const config: RawConfig = {
     github: {
       token: githubToken,
@@ -489,6 +541,11 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
       path: resolvedClaudePath,
       timeout_seconds: claudeTimeoutValue,
       check_interval: claudeCheckIntervalValue,
+    },
+    codex: {
+      path: resolvedCodexPath,
+      timeout_seconds: codexTimeoutValue,
+      check_interval: codexCheckIntervalValue,
     },
   };
 
@@ -615,6 +672,18 @@ export class Config {
 
   get claudePath(): string {
     return this.config.claude.path ?? DEFAULT_CLAUDE_BIN;
+  }
+
+  get codexPath(): string {
+    return this.config.codex?.path ?? DEFAULT_CODEX_BIN;
+  }
+
+  get codexTimeout(): number {
+    return this.config.codex?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
+  }
+
+  get codexCheckInterval(): number {
+    return this.config.codex?.check_interval ?? DEFAULT_CHECK_INTERVAL;
   }
 }
 

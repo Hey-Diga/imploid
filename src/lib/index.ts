@@ -5,3 +5,5 @@ export * from "./repoManager";
 export * from "./stateManager";
 export * from "./claudeProcessor";
 export * from "./orchestrator";
+
+export * from "./codexProcessor";
