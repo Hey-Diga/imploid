@@ -16,7 +16,7 @@ describe("GitHubClient", () => {
     (global.fetch as any).mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(String(input));
       expect(url.pathname).toBe("/repos/owner/repo/issues");
-      expect(url.searchParams.get("labels")).toBe("ready-for-claude");
+    expect(url.searchParams.get("labels")).toBe("agent-ready");
       expect(url.searchParams.get("state")).toBe("open");
       expect(init?.headers).toMatchObject({ Authorization: "token ghp_test" });
 
@@ -33,7 +33,7 @@ describe("GitHubClient", () => {
 
   test("updates issue labels by merging existing ones", async () => {
     const responses = [
-      new Response(JSON.stringify({ labels: [{ name: "ready-for-claude" }] }), { status: 200 }),
+      new Response(JSON.stringify({ labels: [{ name: "agent-ready" }] }), { status: 200 }),
       new Response(null, { status: 200 }),
     ];
 
@@ -45,7 +45,7 @@ describe("GitHubClient", () => {
       }
       if (url.pathname.endsWith("/issues/123/labels")) {
         expect(init?.method).toBe("PUT");
-        expect(init?.body).toBe(JSON.stringify(["ready-for-claude", "claude-working"]));
+        expect(init?.body).toBe(JSON.stringify(["agent-ready", "claude-working"]));
         return responses.shift()!;
       }
       throw new Error(`Unexpected request to ${url}`);

@@ -1,6 +1,6 @@
 # Imploid
 
-Modern GitHub issue triage and automation orchestrator built with Bun. The tool polls selected repositories for issues marked as **ready-for-claude**, provisions clean worktrees, and hands them off to automated agents powered by either the Claude CLI or OpenAI Codex CLI. Notifications and state management keep humans in the loop while agents batch through the backlog.
+Modern GitHub issue triage and automation orchestrator built with Bun. The tool polls selected repositories for issues marked as **agent-ready**, provisions clean worktrees, and hands them off to automated agents powered by either the Claude CLI or OpenAI Codex CLI. Notifications and state management keep humans in the loop while agents batch through the backlog.
 
 ## Highlights
 
@@ -61,14 +61,14 @@ bunx imploid@latest --config ~/.imploid/config.json
 ### Runtime Flow
 
 1. **State Load** – `~/.imploid/processing-state.json` is read to resume in-flight issues.
-2. **Repository Polling** – each configured repo is queried for issues labeled `ready-for-claude`.
+2. **Repository Polling** – each configured repo is queried for issues labeled `agent-ready`.
 3. **Scheduling** – up to `max_concurrent` issues run at once. When a slot opens, the orchestrator reserves agent slots for every processor and launches them together on the same issue.
 4. **Processing** –
    - The `RepoManager` fetches/clones worktrees beneath `~/.imploid/repos/<processor>/<repo>_agent_<index>` so each processor operates in its own sandbox.
    - The shared prompt from `src/lib/processors/prompt.ts` guides both Claude and Codex CLI runners.
    - Processors stream output, persist session metadata, enforce timeouts, and update state.
    - Branches are created as `issue-<number>-<processor>` so all processors can work the same issue concurrently without colliding.
-5. **Notifications & Labels** – Slack/Telegram notifiers reflect status changes, while GitHub labels transition from `ready-for-claude` → `claude-working` → `claude-completed`/`claude-failed`.
+5. **Notifications & Labels** – Slack/Telegram notifiers reflect status changes, while GitHub labels transition from `agent-ready` → `claude-working` → `claude-completed`/`claude-failed`.
 
 ### Processors
 

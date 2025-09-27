@@ -212,7 +212,7 @@ export class ImploidOrchestrator {
     try {
       await this.githubClient.updateIssueLabels(issue.number, {
         add: [processor.labels.working],
-        remove: ["ready-for-claude", processor.labels.completed, processor.labels.failed],
+        remove: ["agent-ready", processor.labels.completed, processor.labels.failed],
       }, repoName);
 
       const formattedTitle = formatTitle(processor.displayName, issue.title);
@@ -269,7 +269,7 @@ export class ImploidOrchestrator {
       } else if (result.status === ProcessStatus.Failed) {
         await this.githubClient.updateIssueLabels(issue.number, {
           add: [processor.labels.failed],
-          remove: [processor.labels.working, "ready-for-claude"],
+          remove: [processor.labels.working, "agent-ready"],
         }, repoName);
         this.stateManager.removeState(issue.number, processor.name);
         await this.stateManager.saveStates();
@@ -278,7 +278,7 @@ export class ImploidOrchestrator {
       console.error(`Error processing issue #${issue.number} with ${processor.displayName}`, error);
       await this.githubClient.updateIssueLabels(issue.number, {
         add: [processor.labels.failed],
-        remove: [processor.labels.working, "ready-for-claude"],
+        remove: [processor.labels.working, "agent-ready"],
       }, repoName).catch(() => undefined);
       this.stateManager.removeState(issue.number, processor.name);
       await this.stateManager.saveStates();

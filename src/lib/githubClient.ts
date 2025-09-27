@@ -33,7 +33,7 @@ export class GitHubClient {
   async getReadyIssues(repo?: string): Promise<GitHubIssue[]> {
     const baseUrl = this.buildRepoUrl(repo);
     const url = new URL(`${baseUrl}/issues`);
-    url.searchParams.set("labels", "ready-for-claude");
+    url.searchParams.set("labels", "agent-ready");
     url.searchParams.set("state", "open");
 
     const response = await fetch(url, {

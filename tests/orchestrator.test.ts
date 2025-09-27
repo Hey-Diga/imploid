@@ -166,7 +166,7 @@ describe("ImploidOrchestrator", () => {
 
     expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls[0][1]).toEqual({
       add: ["claude-working"],
-      remove: ["ready-for-claude", "claude-completed", "claude-failed"],
+      remove: ["agent-ready", "claude-completed", "claude-failed"],
     });
     expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls[1][1]).toEqual({
       add: ["claude-completed"],
@@ -215,7 +215,7 @@ describe("ImploidOrchestrator", () => {
 
     expect(orchestratorAny.githubClient.updateIssueLabels.mock.calls[1][1]).toEqual({
       add: ["claude-failed"],
-      remove: ["claude-working", "ready-for-claude"],
+      remove: ["claude-working", "agent-ready"],
     });
     expect(stateManagerStub.removeState.mock.calls.length).toBe(1);
   });
