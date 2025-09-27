@@ -60,7 +60,7 @@ bunx issue-orchestrator --config ~/.issue-orchestrator/config.json
 
 ### Runtime Flow
 
-1. **State Load** – `processing-state.json` is read to resume in-flight issues.
+1. **State Load** – `~/.issue-orchestrator/processing-state.json` is read to resume in-flight issues.
 2. **Repository Polling** – each configured repo is queried for issues labeled `ready-for-claude`.
 3. **Scheduling** – issues not already running are scheduled until the concurrency budget (`max_concurrent`) is exhausted.
 4. **Processing** –
@@ -111,7 +111,7 @@ bun test
 - **Missing CLI binaries**: ensure `claude` or `codex` are installed and discoverable via `which`. The wizard displays the detected paths; override them during configuration if necessary.
 - **Permission issues on repos**: the orchestrator expects SSH access (`git@github.com`). Verify you can clone the repo manually with the same user.
 - **Slack/Telegram notifications not arriving**: double check tokens and channel/chat IDs in `~/.issue-orchestrator/config.json`. Rerun the wizard with `--config` to update credentials.
-- **Stuck state**: delete `processing-state.json` only if you are certain no automated work is in flight. Otherwise use the state manager to resolve issues first.
+- **Stuck state**: delete `~/.issue-orchestrator/processing-state.json` only if you are certain no automated work is in flight. Otherwise use the state manager to resolve issues first.
 
 ## Contributing
 

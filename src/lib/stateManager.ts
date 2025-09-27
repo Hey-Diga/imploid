@@ -9,11 +9,31 @@ const ACTIVE_STATUSES = new Set<ProcessStatus | string>([
   "needs_input",
 ]);
 
-function resolveStatePath(stateFile: string): string {
-  if (stateFile.startsWith("/")) {
-    return stateFile;
+const DEFAULT_STATE_FILE = (() => {
+  const homeDir = process.env.HOME;
+  if (homeDir && homeDir.length) {
+    return resolve(homeDir, ".issue-orchestrator", "processing-state.json");
   }
-  return resolve(process.cwd(), stateFile);
+  return resolve(process.cwd(), "processing-state.json");
+})();
+
+function expandHomePath(path: string): string {
+  if (path.startsWith("~/")) {
+    const homeDir = process.env.HOME ?? "";
+    if (!homeDir) {
+      return path.slice(2);
+    }
+    return resolve(homeDir, path.slice(2));
+  }
+  return path;
+}
+
+function resolveStatePath(stateFile: string): string {
+  const expanded = expandHomePath(stateFile);
+  if (expanded.startsWith("/")) {
+    return expanded;
+  }
+  return resolve(process.cwd(), expanded);
 }
 
 function makeStateKey(issueNumber: number, processorName: string): string {
@@ -38,7 +58,7 @@ export class StateManager {
   private readonly stateFile: string;
   private states: Map<string, IssueState> = new Map();
 
-  constructor(stateFile = "processing-state.json") {
+  constructor(stateFile = DEFAULT_STATE_FILE) {
     this.stateFile = resolveStatePath(stateFile);
   }
 
