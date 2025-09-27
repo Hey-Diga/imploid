@@ -36,6 +36,7 @@ export class CodexProcessor {
       this.config.codexPath,
       "exec",
       "--full-auto",
+      "--dangerously-bypass-approvals-and-sandbox",
       commandPrompt,
     ];
 
