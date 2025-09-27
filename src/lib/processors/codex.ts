@@ -45,7 +45,6 @@ export class CodexProcessor {
     const codexArgs = [
       this.config.codexPath,
       "exec",
-      "--full-auto",
       "--dangerously-bypass-approvals-and-sandbox",
       commandPrompt,
     ];
