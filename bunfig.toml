@@ -1,2 +1,2 @@
 [test]
-preload = []
+# No preloaded modules are needed; omit the setting that caused Bun parsing errors.
