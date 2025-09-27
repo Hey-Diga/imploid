@@ -90,7 +90,7 @@ describe("CodexProcessor", () => {
   });
 
   test("runs codex CLI with expected arguments and completes", async () => {
-    const { CodexProcessor } = await import("../src/lib/codexProcessor");
+    const { CodexProcessor } = await import("../src/lib/processors/codex");
     const stateManager = makeStateManager(42);
     const repoManager = makeRepoManager("/tmp/repo");
     const notifier = { notifyError: mock(async () => {}) };
@@ -129,7 +129,7 @@ describe("CodexProcessor", () => {
   });
 
   test("reports failure and notifies on non-zero exit", async () => {
-    const { CodexProcessor } = await import("../src/lib/codexProcessor");
+    const { CodexProcessor } = await import("../src/lib/processors/codex");
     const stateManager = makeStateManager(101);
     const repoManager = makeRepoManager("/tmp/repo");
     const notifier = { notifyError: mock(async () => {}) };
@@ -165,7 +165,7 @@ describe("CodexProcessor", () => {
   });
 
   test("kills codex process when timeout elapses", async () => {
-    const { CodexProcessor } = await import("../src/lib/codexProcessor");
+    const { CodexProcessor } = await import("../src/lib/processors/codex");
     const stateManager = makeStateManager(11);
     const repoManager = makeRepoManager("/tmp/repo");
     const notifier = { notifyError: mock(async () => {}) };

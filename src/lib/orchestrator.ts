@@ -5,7 +5,7 @@ import { GitHubClient, GitHubIssue } from "./githubClient";
 import { IssueState, ProcessStatus } from "./models";
 import { RepoManager } from "./repoManager";
 import { StateManager } from "./stateManager";
-import { ClaudeProcessor, Notifier } from "./claudeProcessor";
+import { ClaudeProcessor, Notifier } from "./processors/claude";
 import { SlackNotifier } from "../notifiers/slackNotifier";
 import { TelegramNotifier } from "../notifiers/telegramNotifier";
 

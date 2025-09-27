@@ -3,7 +3,6 @@ export * from "./models";
 export * from "./githubClient";
 export * from "./repoManager";
 export * from "./stateManager";
-export * from "./claudeProcessor";
 export * from "./orchestrator";
-
-export * from "./codexProcessor";
+export * from "./processors/claude";
+export * from "./processors/codex";

@@ -92,7 +92,7 @@ describe("ClaudeProcessor", () => {
   });
 
   test("processIssue creates branch and captures session id on success", async () => {
-    const { ClaudeProcessor } = await import("../src/lib/claudeProcessor");
+    const { ClaudeProcessor } = await import("../src/lib/processors/claude");
     const issueNumber = 321;
     const repoPath = "/tmp/repo";
     const stateManager = makeStateManager(issueNumber);
@@ -140,7 +140,7 @@ describe("ClaudeProcessor", () => {
   });
 
   test("processIssue reports failure and notifies on non-zero exit", async () => {
-    const { ClaudeProcessor } = await import("../src/lib/claudeProcessor");
+    const { ClaudeProcessor } = await import("../src/lib/processors/claude");
     const issueNumber = 99;
     const stateManager = makeStateManager(issueNumber);
     const repoManager = makeRepoManager("/tmp/repo");
@@ -179,7 +179,7 @@ describe("ClaudeProcessor", () => {
   });
 
   test("processIssue kills timed out claude runs", async () => {
-    const { ClaudeProcessor } = await import("../src/lib/claudeProcessor");
+    const { ClaudeProcessor } = await import("../src/lib/processors/claude");
     const issueNumber = 7;
     const stateManager = makeStateManager(issueNumber);
     const repoManager = makeRepoManager("/tmp/repo");
