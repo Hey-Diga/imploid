@@ -1,129 +1,99 @@
-# Imploid
+# Imploid 🚀
 
-Modern GitHub issue triage and automation orchestrator built with Bun. The tool polls selected repositories for issues marked as **agent-ready**, provisions clean worktrees, and hands them off to automated agents powered by either the Claude CLI or OpenAI Codex CLI. Notifications and state management keep humans in the loop while agents batch through the backlog.
+Imploid automates GitHub issue triage by watching for issues marked `agent-ready`, preparing clean worktrees, and delegating them to Claude or Codex command-line agents. The CLI focuses on a fast setup experience so you can keep your backlog moving with minimal ceremony.
 
-## Highlights
+> Looking for source layout or contribution details? See the [developer guide](README.dev.md).
 
-- **Single binary CLI** – `imploid` handles orchestration, configuration, and version reporting.
-- **Guided configuration** – prompts fetch repositories from GitHub, apply consistent defaults, and persist everything under `~/.imploid`.
-- **Pluggable processors** – shared prompt pipeline with concrete runners for Claude and Codex.
-- **Robust state tracking** – JSON state file prevents duplicate processing, enforces concurrency limits, and survives restarts.
-- **Notifier integrations** – optional Slack and Telegram messages for start, completion, failure, or required input.
+> ⚠️ **Security notice**: Imploid launches the Claude and Codex CLIs with `--dangerously-skip-sandbox`/`--dangerously-skip-permissions` so they can operate unattended. Only run Imploid in environments where you trust the agents and the repositories they modify.
 
-## Quick Start
+## What You Can Do 💡
 
-### Prerequisites
+- Quickly configure repositories, agent settings, and notifier credentials with an interactive wizard.
+- Run the orchestrator to pull new `agent-ready` issues, spawn agent sessions, and keep labels in sync.
+- Refresh Claude command templates locally so agent prompts stay current.
+- Receive optional Slack or Telegram notifications as issues progress.
 
-- [Bun](https://bun.sh/) ≥ 1.2
-- Git CLI and `gh` authenticated with repo access
-- Optional: Claude CLI and/or OpenAI Codex CLI installed in `$PATH`
-- GitHub personal access token with `repo` scope
+## Requirements ✅
 
-### Installation
+- [Bun](https://bun.sh/) 1.2 or newer (for `bunx`) **or** Node.js 18+ (for `npx`)
+- Git CLI with access to your target repositories
+- Optional: Claude CLI and/or OpenAI Codex CLI on your `PATH`
+- GitHub personal access token with `repo` scope for issue management
 
-```bash
-git clone <repo>
-cd imploid
-bun install
-```
+## Quick Start (no install) ⚡
 
-### Configure
+Use your preferred package runner to execute the published CLI directly from npm:
 
 ```bash
-bunx imploid --config
-```
-
-The wizard will:
-
-1. Ask for a GitHub token (tap Enter to reuse the saved token on subsequent runs).
-2. List organizations, then repositories, letting you multi-select with checkboxes.
-3. Fix the working directories to `~/.imploid/config.json` and `~/.imploid/repos`.
-4. Configure concurrency, optional Slack/Telegram credentials, and autodetected CLI paths for Claude/Codex.
-
-Configuration can be rerun anytime; the wizard pre-fills existing values while keeping directories consistent.
-
-## Usage
-
-```bash
-# Run orchestrator using defaults
-bunx imploid@latest
-
-# Show help or version
-bunx imploid@latest --help
-bunx imploid@latest --version
-
-# Edit configuration explicitly
+# Configure Imploid for the first time
 bunx imploid@latest --config
 # or
-bunx imploid@latest --config ~/.imploid/config.json
-
-# Install Claude command templates locally
-bunx imploid@latest --setup
+npx imploid@latest --config
 ```
 
-### Runtime Flow
+During setup you will:
 
-1. **State Load** – `~/.imploid/processing-state.json` is read to resume in-flight issues.
-2. **Repository Polling** – each configured repo is queried for issues labeled `agent-ready`.
-3. **Scheduling** – up to `max_concurrent` issues run at once. When a slot opens, the orchestrator reserves agent slots for every processor and launches them together on the same issue.
-4. **Processing** –
-   - The `RepoManager` fetches/clones worktrees beneath `~/.imploid/repos/<processor>/<repo>_agent_<index>` so each processor operates in its own sandbox.
-   - The shared prompt from `src/lib/processors/prompt.ts` guides both Claude and Codex CLI runners.
-   - Processors stream output, persist session metadata, enforce timeouts, and update state.
-   - Branches are created as `issue-<number>-<processor>` so all processors can work the same issue concurrently without colliding.
-5. **Notifications & Labels** – Slack/Telegram notifiers reflect status changes, while GitHub labels transition from `agent-ready` → `claude-working` → `claude-completed`/`claude-failed`.
+1. Enter or reuse a GitHub token.
+2. Choose organizations and repositories to monitor.
+3. Confirm the storage directories under `~/.imploid`.
+4. Set concurrency limits and optional Slack/Telegram credentials.
+5. Point Imploid at your local Claude and/or Codex CLI binaries.
 
-### Processors
+The wizard can be rerun at any time. Existing values are pre-filled so updates are quick.
 
-- **Claude**: executes the Claude CLI (`claude --dangerously-skip-permissions …`) with streaming JSON output. Session IDs are captured for follow-up.
-- **Codex**: runs the OpenAI Codex CLI (`codex --full-auto …`) using the identical prompt. Designed for environments where Claude is unavailable.
+## Optional Local Install 📦
 
-At the heart of both processors is `buildIssuePrompt` (`src/lib/processors/prompt.ts`), a curated workflow script that instructs agents to fetch context, analyse discussions, iterate on implementation, and report status. Because the same prompt is reused, behavior stays consistent regardless of which CLI is active. Shared utilities in `src/lib/processors/shared.ts` encapsulate Git branch preparation and notifier error handling so the processors remain focused on command execution.
-
-## Project Structure
-
-```
-src/
-  lib/
-    config.ts          # Configuration load/save + interactive wizard
-    orchestrator.ts    # Main orchestrator loop
-    repoManager.ts     # Git worktree management
-    stateManager.ts    # JSON state persistence
-    processors/
-      prompt.ts        # Shared issue prompt builder
-      shared.ts        # Common helpers for command runners
-      claude.ts        # Claude CLI processor
-      codex.ts         # Codex CLI processor
-tests/
-  *.test.ts           # Bun test suite mirrors the src modules
-bin/
-  imploid  # CLI entry point (Bun script)
-```
-
-## Testing
+Install once if you prefer to call `imploid` without `bunx`/`npx`:
 
 ```bash
-bun test
+npm install -g imploid
+# or with Bun
+bun add -g imploid
 ```
 
-- Unit tests mock CLI invocations, repository operations, and Inquirer prompts.
-- Configuration tests simulate both initial creation and edits with Codex/Claude defaults.
+Then run:
 
-## Troubleshooting
+```bash
+imploid --config   # interactive setup
+imploid            # run orchestrator
+imploid --setup    # refresh Claude command templates
+```
 
-- **Missing CLI binaries**: ensure `claude` or `codex` are installed and discoverable via `which`. The wizard displays the detected paths; override them during configuration if necessary.
-- **Permission issues on repos**: the orchestrator expects SSH access (`git@github.com`). Verify you can clone the repo manually with the same user.
-- **Claude commands install**: run `bunx imploid --setup` inside the target repository to populate `.claude/commands` with the latest templates from `Hey-Diga/dotclaude`.
-- **Slack/Telegram notifications not arriving**: double check tokens and channel/chat IDs in `~/.imploid/config.json`. Rerun the wizard with `--config` to update credentials.
-- **Stuck state**: delete `~/.imploid/processing-state.json` only if you are certain no automated work is in flight. Otherwise use the state manager to resolve issues first.
+## Daily Usage 🔁
 
-## Contributing
+```bash
+# Run the orchestrator with your saved configuration
+bunx imploid@latest
+# or
+npx imploid@latest
 
-1. Fork the repository and create a branch (e.g., `feature/codex-retries`).
-2. Make changes with Bun formatting conventions and keep code comments succinct.
-3. Run `bun test` and manually exercise `bunx imploid --config` if changes touch the wizard.
-4. Submit a pull request referencing any related issues.
+# Show inline help or version information
+bunx imploid@latest --help
+npx imploid@latest --version
+```
 
-## License
+Imploid will read `~/.imploid/processing-state.json`, poll the configured repositories for `agent-ready` issues, and launch the enabled processors in parallel while respecting your concurrency limits.
 
-Project contributions should follow the repository’s `LICENSE`. If none exists, add one before distributing binaries or accepting external contributions.
+## Update Claude Command Templates 🧩
+
+If you rely on the Claude CLI, refresh the local `.claude/commands` directory in your repository before kicking off new sessions:
+
+```bash
+bunx imploid@latest --setup
+# or
+npx imploid@latest --setup
+```
+
+This command replaces `.claude/commands` with the latest templates from `Hey-Diga/dotclaude`.
+
+## Troubleshooting 🛠️
+
+- **Missing CLI binaries**: ensure `claude` or `codex` are installed and available via `which`. Re-run the configuration wizard to update their paths.
+- **Permission issues**: Imploid expects SSH access (`git@github.com`). Verify you can manually clone each repository.
+- **Claude commands missing**: run `bunx imploid@latest --setup` (or `npx imploid@latest --setup`) inside the target repository to repopulate `.claude/commands`.
+- **Slack/Telegram notifications not arriving**: confirm tokens and channel/chat IDs in `~/.imploid/config.json` and rerun `--config` if needed.
+- **Stuck state**: only delete `~/.imploid/processing-state.json` if you are sure no automated work is running; otherwise resolve outstanding issues first.
+
+## Need More Details? 📚
+
+Developers and contributors can find architecture notes, project structure, and testing guidance in the [developer guide](README.dev.md).
