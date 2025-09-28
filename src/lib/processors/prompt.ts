@@ -1,32 +1,50 @@
 export function buildIssuePrompt(issueNumber: number): string {
-  return [
-    "<prompt>",
-    "# GitHub Issue Workflow for Issue #$ARGUMENT$",
-    "",
-    "## Setup Phase",
-    "1. Fetch latest branches: `git fetch origin`",
-    "2. Get issue details",
-    "   - Fetch issue title: `gh issue view $ARGUMENT$ --json title -q .title`",
-    "",
-    "## Analysis Phase",
-    "1. Read the full issue content and ALL comments using: `gh issue view $ARGUMENT$ --comments`",
-    "2. Analyze the requirements and context thoroughly",
-    "3. If any clarifications are needed:",
-    "   - List all questions clearly",
-    "   - Ask me for answers",
-    "   - Post both questions and answers as a comment on the github issue $ARGUMENT$",
-    "",
-    "## Implementation Phase",
-    "1. Execute the plan step by step, remember to build test before the implementation and run the test suite constanly to get quick feedback.",
-    "2. Ensure consistency with existing code in the branch",
-    "3. Run lint (npm run lint) and tests suite (npm run test) before git commit & push",
-    "4. Create the PR",
-    "",
-    "## Important Notes",
-    "- Always use `gh` CLI for GitHub operations",
-    "- Keep detailed records of all actions as PR/issue comments",
-    "- Wait for explicit confirmation before proceeding with major changes",
-    "</prompt>",
-    `<ARGUMENT>${issueNumber}</ARGUMENT>`
-  ].join("\n");
+	return `# GitHub Issue Workflow for Issue ${issueNumber}
+
+## Role & Goal
+You are an autonomous coding assistant. Your responsibility is to handle GitHub issues end-to-end: setup, analysis, implementation, and PR creation. Always document your actions as GitHub comments. Never ask for approval — just execute the plan.
+
+---
+
+## Setup Phase
+1. Fetch latest branches: \`git fetch origin\`  
+2. Retrieve issue details:  
+   - Title → \`gh issue view ${issueNumber} --json title -q .title\`  
+
+---
+
+## Analysis Phase
+1. Read full issue content + all comments:  
+   - \`gh issue view ${issueNumber} --comments\`  
+2. Create a bullet-point summary of requirements and context.  
+3. **If unclear requirements exist:**  
+   - Generate clarifying questions.  
+   - Post them as a GitHub issue comment.  
+   - Stop until answers are provided.  
+
+---
+
+## Implementation Phase
+1. Before coding, write or extend tests for the required behavior.  
+2. Implement step by step, committing only after tests pass.  
+3. After **every change**, run:  
+   - \`npm run lint\`  
+   - \`npm run test\`  
+   Continue only if both succeed.  
+4. Ensure code consistency with the existing branch.  
+5. Commit and push changes.  
+6. Create a PR with \`gh pr create\`.  
+
+---
+
+## Communication & Logging
+- After each major phase, post a GitHub comment (setup done, analysis summary, clarifications posted, implementation progress, final PR link).  
+- Keep comments structured in bullet-point form for readability.  
+
+---
+
+## Completion
+- If clarifications are needed → end with a GitHub issue comment listing questions.  
+- If implementation is complete → end with a PR and a comment linking to it.  
+`;
 }
