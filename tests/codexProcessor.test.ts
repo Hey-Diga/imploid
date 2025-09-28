@@ -131,8 +131,11 @@ describe("CodexProcessor", () => {
     const spawnArgs = spawnProcessMock.mock.calls[0][0];
     expect(spawnArgs[0]).toBe("/usr/local/bin/codex");
     expect(spawnArgs[1]).toBe("exec");
-    expect(spawnArgs[2]).toBe("--dangerously-bypass-approvals-and-sandbox");
-    expect(typeof spawnArgs[3]).toBe("string");
+    expect(spawnArgs[2]).toBe("--ask-for-approval");
+    expect(spawnArgs[3]).toBe("never");
+    expect(spawnArgs[4]).toBe("--sandbox");
+    expect(spawnArgs[5]).toBe("danger-full-access");
+    expect(typeof spawnArgs[6]).toBe("string");
     const commands = runCommandMock.mock.calls.map(([cmd]) => (cmd as string[]).join(" "));
     expect(commands).toContain(`git checkout -B ${branch}`);
     expect(commands).toContain("git status --porcelain");
