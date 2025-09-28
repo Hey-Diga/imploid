@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setupClaudeDotfiles } from "../src/lib/claudeDotfilesSetup";
+import { installClaudeCommands } from "../src/lib/claudeCommandsInstaller";
 
 const API_BASE = "https://api.github.com/repos/Hey-Diga/dotclaude/contents";
 const DEFAULT_REF = "main";
@@ -13,7 +13,7 @@ afterAll(async () => {
     await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-describe("setupClaudeDotfiles", () => {
+describe("installClaudeCommands", () => {
     test("downloads commands into the local .claude directory", async () => {
         const tempDir = await mkdtemp(join(tmpdir(), "claude-setup-test-"));
         tempDirs.push(tempDir);
@@ -51,7 +51,7 @@ describe("setupClaudeDotfiles", () => {
                 new Response(JSON.stringify({ hello: "world" }), { status: 200 }),
         });
 
-        await setupClaudeDotfiles({ cwd: tempDir, fetchImpl });
+        await installClaudeCommands({ cwd: tempDir, fetchImpl });
 
         const commandsDir = join(tempDir, ".claude", "commands");
         await expect(stat(commandsDir)).resolves.toBeDefined();

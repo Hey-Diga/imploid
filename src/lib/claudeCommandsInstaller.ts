@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-export interface SetupClaudeDotfilesOptions {
+export interface InstallClaudeCommandsOptions {
     cwd?: string;
     fetchImpl?: typeof fetch;
 }
@@ -24,7 +24,7 @@ const DEFAULT_HEADERS = {
     "User-Agent": "imploid",
 };
 
-export async function setupClaudeDotfiles(options: SetupClaudeDotfilesOptions = {}): Promise<void> {
+export async function installClaudeCommands(options: InstallClaudeCommandsOptions = {}): Promise<void> {
     const cwd = options.cwd ?? process.cwd();
     const fetchImpl = options.fetchImpl ?? globalThis.fetch;
 

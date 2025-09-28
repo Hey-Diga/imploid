@@ -4,18 +4,18 @@ This guide covers the source layout, development workflow, and testing strategy 
 
 ## Architecture Overview
 
-- **CLI entry point**: `bin/imploid` parses flags (`--config`, `--setup`, `--version`) and routes into the orchestrator or configuration helpers.
+- **CLI entry point**: `bin/imploid` parses flags (`--config`, `--install-commands`, `--version`) and routes into the orchestrator or configuration helpers.
 - **Core orchestration**: `src/lib/orchestrator.ts` coordinates repository polling, processor scheduling, and state tracking.
 - **Processors**: `src/lib/processors/claude.ts` and `src/lib/processors/codex.ts` execute the respective CLIs using the shared prompt in `src/lib/processors/prompt.ts`.
 - **State & repos**: `src/lib/stateManager.ts` persists progress under `~/.imploid`, while `src/lib/repoManager.ts` manages per-processor worktrees.
-- **Claude dotfiles setup**: `src/lib/claudeDotfilesSetup.ts` mirrors the public `Hey-Diga/dotclaude` commands into `.claude/commands` when the CLI is invoked with `--setup`.
+- **Claude commands installer**: `src/lib/claudeCommandsInstaller.ts` mirrors the public `Hey-Diga/dotclaude` commands into `.claude/commands` when the CLI is invoked with `--install-commands`.
 
 ## Project Structure
 
 ```
 src/
   lib/
-    claudeDotfilesSetup.ts  # Pulls command templates from Hey-Diga/dotclaude
+    claudeCommandsInstaller.ts  # Pulls command templates from Hey-Diga/dotclaude
     config.ts               # Configuration persistence and interactive wizard
     orchestrator.ts         # Main orchestrator loop
     repoManager.ts          # Git worktree management
@@ -45,7 +45,7 @@ bun install
 ```bash
 bunx imploid --config    # Interactive configuration wizard
 bunx imploid             # Run orchestrator using saved config
-bunx imploid --setup     # Refresh .claude/commands in the current repo
+bunx imploid --install-commands  # Refresh .claude/commands in the current repo
 bun test                 # Run the full Bun test suite
 bun test tests/<file>    # Target a specific test file
 ```
@@ -66,8 +66,7 @@ bun test tests/<file>    # Target a specific test file
 
 ## Contributing Workflow
 
-1. Branch from `main` (e.g., `feature/add-setup-command`).
+1. Branch from `main` (e.g., `feature/install-commands-flag`).
 2. Implement changes and update tests/documentation.
-3. Run `bun test` and, if relevant, manual flows like `bunx imploid --config` or `bunx imploid --setup`.
+3. Run `bun test` and, if relevant, manual flows like `bunx imploid --config` or `bunx imploid --install-commands`.
 4. Follow repository commit guidelines (present tense, reference issues in the body) before submitting a pull request.
-

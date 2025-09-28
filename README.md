@@ -6,6 +6,15 @@ Imploid automates GitHub issue triage by watching for issues marked `agent-ready
 
 > ⚠️ **Security notice**: Imploid launches the Claude and Codex CLIs with `--dangerously-skip-sandbox`/`--dangerously-skip-permissions` so they can operate unattended. Only run Imploid in environments where you trust the agents and the repositories they modify.
 
+Imploid automates the **Implement** phase defined in the [heydiga dotclaude workflow](https://github.com/Hey-Diga/dotclaude). The agents follow the same structured steps:
+
+1. Gather context from the issue thread and repository.
+2. Plan the implementation, outlining the proposed changes.
+3. Modify code, run checks, and iterate until the plan is complete.
+4. Summarize the work, outstanding tasks, and validation results.
+
+Review the [heydiga dotclaude documentation](https://github.com/Hey-Diga/dotclaude) for the full end-to-end flow, including upstream phases like triage and question answering. Go to [Install HeyDiga Claude Commands](#install-heydiga-claude-commands) to install the required Claude command files into the current repository.
+
 ## What You Can Do 💡
 
 - Quickly configure repositories, agent settings, and notifier credentials with an interactive wizard.
@@ -41,6 +50,34 @@ During setup you will:
 
 The wizard can be rerun at any time. Existing values are pre-filled so updates are quick.
 
+## Daily Usage 🔁
+
+```bash
+# Run the orchestrator with your saved configuration
+bunx imploid@latest
+# or
+npx imploid@latest
+
+# Show inline help, version information or update the configuration with the wizard
+npx imploid@latest --help
+npx imploid@latest --version
+npx imploid@latest --config
+```
+
+Imploid will read `~/.imploid/processing-state.json`, poll the configured repositories for `agent-ready` issues, and launch the enabled processors in parallel while respecting your concurrency limits.
+
+## Install HeyDiga Claude Commands 🧩
+
+To use the [HeyDiga agent coding flow](https://github.com/Hey-Diga/dotclaude) end to end, install the required Claude command files into the current repository with the `--install-commands` option:
+
+```bash
+bunx imploid@latest --install-commands
+# or
+npx imploid@latest --install-commands
+```
+
+Running `--install-commands` recreates `.claude/commands` with the latest templates from [`Hey-Diga/dotclaude`](https://github.com/Hey-Diga/dotclaude), ensuring the Claude agent follows the official workflow scripts.
+
 ## Optional Local Install 📦
 
 Install once if you prefer to call `imploid` without `bunx`/`npx`:
@@ -51,46 +88,11 @@ npm install -g imploid
 bun add -g imploid
 ```
 
-Then run:
-
-```bash
-imploid --config   # interactive setup
-imploid            # run orchestrator
-imploid --setup    # refresh Claude command templates
-```
-
-## Daily Usage 🔁
-
-```bash
-# Run the orchestrator with your saved configuration
-bunx imploid@latest
-# or
-npx imploid@latest
-
-# Show inline help or version information
-bunx imploid@latest --help
-npx imploid@latest --version
-```
-
-Imploid will read `~/.imploid/processing-state.json`, poll the configured repositories for `agent-ready` issues, and launch the enabled processors in parallel while respecting your concurrency limits.
-
-## Update Claude Command Templates 🧩
-
-If you rely on the Claude CLI, refresh the local `.claude/commands` directory in your repository before kicking off new sessions:
-
-```bash
-bunx imploid@latest --setup
-# or
-npx imploid@latest --setup
-```
-
-This command replaces `.claude/commands` with the latest templates from `Hey-Diga/dotclaude`.
-
 ## Troubleshooting 🛠️
 
 - **Missing CLI binaries**: ensure `claude` or `codex` are installed and available via `which`. Re-run the configuration wizard to update their paths.
 - **Permission issues**: Imploid expects SSH access (`git@github.com`). Verify you can manually clone each repository.
-- **Claude commands missing**: run `bunx imploid@latest --setup` (or `npx imploid@latest --setup`) inside the target repository to repopulate `.claude/commands`.
+- **Claude commands missing**: run `bunx imploid@latest --install-commands` (or `npx imploid@latest --install-commands`) inside the target repository to repopulate `.claude/commands`.
 - **Slack/Telegram notifications not arriving**: confirm tokens and channel/chat IDs in `~/.imploid/config.json` and rerun `--config` if needed.
 - **Stuck state**: only delete `~/.imploid/processing-state.json` if you are sure no automated work is running; otherwise resolve outstanding issues first.
 
