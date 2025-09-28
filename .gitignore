@@ -12,3 +12,5 @@ processing-state.json
 
 # Python virtual environments
 python/venv/
+
+.claude

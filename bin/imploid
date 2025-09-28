@@ -3,6 +3,7 @@ import { main } from "../src/lib/orchestrator";
 import packageJson from "../package.json" assert { type: 'json' };
 const VERSION = packageJson.version ?? '0.0.0';
 import { configureInteractive } from "../src/lib/config";
+import { setupClaudeDotfiles } from "../src/lib/claudeDotfilesSetup";
 
 function printHelp(): void {
   console.log(`Usage: imploid [options]
@@ -10,6 +11,7 @@ function printHelp(): void {
 Options:
   --config [path]   Launch interactive configuration (default: config.json)
   --help            Show this help message
+  --setup           Copy Claude command templates into .claude/commands
   --version         Show the current version
 
 Version: ${VERSION}`);
@@ -21,6 +23,7 @@ async function run(): Promise<void> {
   let configMode = false;
   let configPath: string | undefined;
   let showVersion = false;
+  let setupMode = false;
   const unknownArgs: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
@@ -39,6 +42,8 @@ async function run(): Promise<void> {
     } else if (arg.startsWith("--config=")) {
       configMode = true;
       configPath = arg.split("=")[1] ?? undefined;
+    } else if (arg === "--setup") {
+      setupMode = true;
     } else {
       unknownArgs.push(arg);
     }
@@ -61,6 +66,11 @@ async function run(): Promise<void> {
 
   if (showVersion) {
     console.log(`imploid ${VERSION}`);
+    return;
+  }
+
+  if (setupMode) {
+    await setupClaudeDotfiles();
     return;
   }
 

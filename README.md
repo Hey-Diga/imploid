@@ -56,6 +56,9 @@ bunx imploid@latest --version
 bunx imploid@latest --config
 # or
 bunx imploid@latest --config ~/.imploid/config.json
+
+# Install Claude command templates locally
+bunx imploid@latest --setup
 ```
 
 ### Runtime Flow
@@ -110,6 +113,7 @@ bun test
 
 - **Missing CLI binaries**: ensure `claude` or `codex` are installed and discoverable via `which`. The wizard displays the detected paths; override them during configuration if necessary.
 - **Permission issues on repos**: the orchestrator expects SSH access (`git@github.com`). Verify you can clone the repo manually with the same user.
+- **Claude commands install**: run `bunx imploid --setup` inside the target repository to populate `.claude/commands` with the latest templates from `Hey-Diga/dotclaude`.
 - **Slack/Telegram notifications not arriving**: double check tokens and channel/chat IDs in `~/.imploid/config.json`. Rerun the wizard with `--config` to update credentials.
 - **Stuck state**: delete `~/.imploid/processing-state.json` only if you are certain no automated work is in flight. Otherwise use the state manager to resolve issues first.
 
