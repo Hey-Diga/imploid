@@ -39,6 +39,7 @@ bun install
 ```
 
 - Bun 1.2+ is required.
+- GitHub CLI (`gh`) must be installed and available in `PATH` for orchestrator runs.
 - Configuration, state, and repo clones live under `~/.imploid`.
 
 ## Key Commands

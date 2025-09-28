@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { spawnSync } from "node:child_process";
 import { main } from "../src/lib/orchestrator";
 import packageJson from "../package.json" assert { type: 'json' };
 const VERSION = packageJson.version ?? '0.0.0';
@@ -29,6 +30,17 @@ function parseProcessorsArgument(value: string): { processors?: ProcessorName[];
   }
 
   return { processors: unique };
+}
+
+function ensureGhCliAvailable(): boolean {
+  const result = spawnSync("gh", ["--version"], { stdio: "ignore" });
+  if (result.error || result.status !== 0) {
+    console.error(
+      "GitHub CLI (gh) is required but was not found. Please install it from https://cli.github.com/ and rerun imploid."
+    );
+    return false;
+  }
+  return true;
 }
 
 function printHelp(): void {
@@ -133,6 +145,10 @@ async function run(): Promise<void> {
   try {
     if (configMode) {
       await configureInteractive(configPath);
+      return;
+    }
+    if (!ensureGhCliAvailable()) {
+      process.exitCode = 1;
       return;
     }
     await main({ processors: processorsOverride });

@@ -27,6 +27,7 @@ Review the [heydiga dotclaude documentation](https://github.com/Hey-Diga/dotclau
 
 - [Bun](https://bun.sh/) 1.2 or newer (for `bunx`) **or** Node.js 18+ (for `npx`)
 - Git CLI with access to your target repositories
+- [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 - Optional: Claude CLI and/or OpenAI Codex CLI on your `PATH`
 - GitHub personal access token with `repo` scope for issue management
 
