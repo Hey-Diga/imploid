@@ -9,7 +9,7 @@ You are an autonomous coding assistant. Your responsibility is to handle GitHub 
 ## Setup Phase
 1. Fetch latest branches: \`git fetch origin\`  
 2. Retrieve issue details:  
-   - Title → \`gh issue view ${issueNumber} --json title -q .title\`  
+   - Title → \`gh issue view ${issueNumber}\`
 
 ---
 
