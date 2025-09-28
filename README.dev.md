@@ -9,6 +9,7 @@ This guide covers the source layout, development workflow, and testing strategy 
 - **Processors**: `src/lib/processors/claude.ts` and `src/lib/processors/codex.ts` execute the respective CLIs using the shared prompt in `src/lib/processors/prompt.ts`.
 - **State & repos**: `src/lib/stateManager.ts` persists progress under `~/.imploid`, while `src/lib/repoManager.ts` manages per-processor worktrees.
 - **Claude commands installer**: `src/lib/claudeCommandsInstaller.ts` mirrors the public `Hey-Diga/dotclaude` commands into `.claude/commands` when the CLI is invoked with `--install-commands`.
+- **Processor configuration**: `src/lib/config.ts` persists which processors are enabled by default, and the CLI accepts `--processors` to override the list at runtime.
 
 ## Project Structure
 
@@ -46,6 +47,7 @@ bun install
 bunx imploid --config    # Interactive configuration wizard
 bunx imploid             # Run orchestrator using saved config
 bunx imploid --install-commands  # Refresh .claude/commands in the current repo
+bunx imploid --processors claude  # Override processors for a single run
 bun test                 # Run the full Bun test suite
 bun test tests/<file>    # Target a specific test file
 ```

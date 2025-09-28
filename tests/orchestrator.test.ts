@@ -42,6 +42,12 @@ const createStubConfig = (basePath: string) => {
     claudePath: "claude",
     claudeTimeout: 60,
     claudeCheckInterval: 1,
+    get enabledProcessors() {
+      return ["claude", "codex"];
+    },
+    isProcessorEnabled(name: string) {
+      return this.enabledProcessors.includes(name);
+    },
     getProcessorRepoPath(processorName: string, agentIndex: number, repoName?: string) {
       const repo = repoName ?? repos[0].name;
       const short = repo.split("/").pop() ?? repo;
@@ -255,5 +261,15 @@ describe("ImploidOrchestrator", () => {
     expect(codexRunner.mock.calls[0][0]).toBe(303);
     expect(codexRunner.mock.calls[0][1]).toBe(0);
     expect(stateManagerStub.getActiveIssueNumbers.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  test("throws when no processors are enabled", () => {
+    const baseRepoPath = resolve(tempDir, "repos");
+    const config = createStubConfig(baseRepoPath) as any;
+    Object.defineProperty(config, "enabledProcessors", {
+      get: () => [],
+    });
+
+    expect(() => new ImploidOrchestrator(config)).toThrow(/No processors enabled/);
   });
 });

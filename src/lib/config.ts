@@ -9,6 +9,9 @@ export interface GitHubRepoConfig {
   base_repo_path: string;
 }
 
+export const SUPPORTED_PROCESSORS = ["claude", "codex"] as const;
+export type ProcessorName = (typeof SUPPORTED_PROCESSORS)[number];
+
 export interface RawConfig {
   github: {
     token: string;
@@ -36,6 +39,7 @@ export interface RawConfig {
     check_interval?: number;
     path?: string;
   };
+  processors?: Partial<Record<ProcessorName, boolean>>;
 }
 
 const DEFAULT_MAX_CONCURRENT = 3;
@@ -439,97 +443,156 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
     slackConfig = { bot_token: resolvedSlackToken, channel_id: resolvedSlackChannel };
   }
 
-  const whichClaude = spawnSync("which", ["claude"], { encoding: "utf8" });
-  const detectedClaude = whichClaude.status === 0 ? whichClaude.stdout.trim() : "";
-  const claudeDefault = existing?.claude?.path ?? (detectedClaude || DEFAULT_CLAUDE_BIN);
+  const existingProcessors = existing?.processors ?? {};
+  const processorLabels: Record<ProcessorName, string> = {
+    claude: "Claude (Anthropic)",
+    codex: "Codex (OpenAI)",
+  };
 
-  const { claudePath } = await inquirer.prompt<{ claudePath: string }>([
+  const processorChoices = SUPPORTED_PROCESSORS.map((processor) => ({
+    name: processorLabels[processor],
+    value: processor,
+    checked: existingProcessors[processor] !== false,
+  }));
+
+  const { enabledProcessors } = await inquirer.prompt<{ enabledProcessors: ProcessorName[] }>([
     {
-      type: "input",
-      name: "claudePath",
-      message: "Claude CLI path",
-      default: claudeDefault,
-      filter: (value: string) => value.trim(),
-      validate: (value: string) => (value.trim().length ? true : "Claude path is required."),
+      type: "checkbox",
+      name: "enabledProcessors",
+      message: "Select processors to enable",
+      choices: processorChoices,
+      loop: false,
+      validate: (value: ProcessorName[]) => (value.length ? true : "Select at least one processor."),
     },
   ]);
-  const resolvedClaudePath = expandHomePath(claudePath || claudeDefault);
 
-  const existingTimeout = existing?.claude?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
-  const { claudeTimeout } = await inquirer.prompt<{ claudeTimeout: string }>([
-    {
-      type: "input",
-      name: "claudeTimeout",
-      message: "Claude run timeout in seconds",
-      default: String(existingTimeout),
-      validate: (value: string) => {
-        const parsed = Number(value);
-        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+  const enabledProcessorSet = new Set<ProcessorName>(enabledProcessors);
+  const claudeEnabled = enabledProcessorSet.has("claude");
+  const codexEnabled = enabledProcessorSet.has("codex");
+
+  let claudeConfig: RawConfig["claude"];
+  if (claudeEnabled) {
+    const whichClaude = spawnSync("which", ["claude"], { encoding: "utf8" });
+    const detectedClaude = whichClaude.status === 0 ? whichClaude.stdout.trim() : "";
+    const claudeDefault = existing?.claude?.path ?? (detectedClaude || DEFAULT_CLAUDE_BIN);
+
+    const { claudePath } = await inquirer.prompt<{ claudePath: string }>([
+      {
+        type: "input",
+        name: "claudePath",
+        message: "Claude CLI path",
+        default: claudeDefault,
+        filter: (value: string) => value.trim(),
+        validate: (value: string) => (value.trim().length ? true : "Claude path is required."),
       },
-    },
-  ]);
-  const claudeTimeoutValue = Math.max(1, Math.round(Number(claudeTimeout)));
+    ]);
+    const resolvedClaudePath = expandHomePath(claudePath || claudeDefault);
 
-  const existingInterval = existing?.claude?.check_interval ?? DEFAULT_CHECK_INTERVAL;
-  const { claudeCheckInterval } = await inquirer.prompt<{ claudeCheckInterval: string }>([
-    {
-      type: "input",
-      name: "claudeCheckInterval",
-      message: "Claude status check interval (seconds)",
-      default: String(existingInterval),
-      validate: (value: string) => {
-        const parsed = Number(value);
-        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+    const existingTimeout = existing?.claude?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
+    const { claudeTimeout } = await inquirer.prompt<{ claudeTimeout: string }>([
+      {
+        type: "input",
+        name: "claudeTimeout",
+        message: "Claude run timeout in seconds",
+        default: String(existingTimeout),
+        validate: (value: string) => {
+          const parsed = Number(value);
+          return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+        },
       },
-    },
-  ]);
-  const claudeCheckIntervalValue = Math.max(1, Math.round(Number(claudeCheckInterval)));
+    ]);
+    const claudeTimeoutValue = Math.max(1, Math.round(Number(claudeTimeout)));
 
-  const codexWhich = spawnSync("which", ["codex"], { encoding: "utf8" });
-  const codexDetected = codexWhich.status === 0 ? codexWhich.stdout.trim() : "";
-  const codexDefault = existing?.codex?.path ?? (codexDetected || DEFAULT_CODEX_BIN);
-
-  const { codexPath } = await inquirer.prompt<{ codexPath: string }>([
-    {
-      type: "input",
-      name: "codexPath",
-      message: "Codex CLI path",
-      default: codexDefault,
-      filter: (value: string) => value.trim(),
-      validate: (value: string) => (value.trim().length ? true : "Codex path is required."),
-    },
-  ]);
-  const resolvedCodexPath = expandHomePath(codexPath || codexDefault);
-
-  const existingCodexTimeout = existing?.codex?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
-  const { codexTimeout } = await inquirer.prompt<{ codexTimeout: string }>([
-    {
-      type: "input",
-      name: "codexTimeout",
-      message: "Codex run timeout in seconds",
-      default: String(existingCodexTimeout),
-      validate: (value: string) => {
-        const parsed = Number(value);
-        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+    const existingInterval = existing?.claude?.check_interval ?? DEFAULT_CHECK_INTERVAL;
+    const { claudeCheckInterval } = await inquirer.prompt<{ claudeCheckInterval: string }>([
+      {
+        type: "input",
+        name: "claudeCheckInterval",
+        message: "Claude status check interval (seconds)",
+        default: String(existingInterval),
+        validate: (value: string) => {
+          const parsed = Number(value);
+          return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+        },
       },
-    },
-  ]);
-  const codexTimeoutValue = Math.max(1, Math.round(Number(codexTimeout)));
+    ]);
+    const claudeCheckIntervalValue = Math.max(1, Math.round(Number(claudeCheckInterval)));
 
-  const existingCodexInterval = existing?.codex?.check_interval ?? DEFAULT_CHECK_INTERVAL;
-  const { codexCheckInterval } = await inquirer.prompt<{ codexCheckInterval: string }>([
-    {
-      type: "input",
-      name: "codexCheckInterval",
-      message: "Codex status check interval (seconds)",
-      default: String(existingCodexInterval),
-      validate: (value: string) => {
-        const parsed = Number(value);
-        return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+    claudeConfig = {
+      path: resolvedClaudePath,
+      timeout_seconds: claudeTimeoutValue,
+      check_interval: claudeCheckIntervalValue,
+    };
+  } else {
+    claudeConfig = existing?.claude ?? {
+      path: DEFAULT_CLAUDE_BIN,
+      timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
+      check_interval: DEFAULT_CHECK_INTERVAL,
+    };
+  }
+
+  let codexConfig: RawConfig["codex"] | undefined;
+  if (codexEnabled) {
+    const codexWhich = spawnSync("which", ["codex"], { encoding: "utf8" });
+    const codexDetected = codexWhich.status === 0 ? codexWhich.stdout.trim() : "";
+    const codexDefault = existing?.codex?.path ?? (codexDetected || DEFAULT_CODEX_BIN);
+
+    const { codexPath } = await inquirer.prompt<{ codexPath: string }>([
+      {
+        type: "input",
+        name: "codexPath",
+        message: "Codex CLI path",
+        default: codexDefault,
+        filter: (value: string) => value.trim(),
+        validate: (value: string) => (value.trim().length ? true : "Codex path is required."),
       },
-    },
-  ]);
-  const codexCheckIntervalValue = Math.max(1, Math.round(Number(codexCheckInterval)));
+    ]);
+    const resolvedCodexPath = expandHomePath(codexPath || codexDefault);
+
+    const existingCodexTimeout = existing?.codex?.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS;
+    const { codexTimeout } = await inquirer.prompt<{ codexTimeout: string }>([
+      {
+        type: "input",
+        name: "codexTimeout",
+        message: "Codex run timeout in seconds",
+        default: String(existingCodexTimeout),
+        validate: (value: string) => {
+          const parsed = Number(value);
+          return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+        },
+      },
+    ]);
+    const codexTimeoutValue = Math.max(1, Math.round(Number(codexTimeout)));
+
+    const existingCodexInterval = existing?.codex?.check_interval ?? DEFAULT_CHECK_INTERVAL;
+    const { codexCheckInterval } = await inquirer.prompt<{ codexCheckInterval: string }>([
+      {
+        type: "input",
+        name: "codexCheckInterval",
+        message: "Codex status check interval (seconds)",
+        default: String(existingCodexInterval),
+        validate: (value: string) => {
+          const parsed = Number(value);
+          return Number.isNaN(parsed) || parsed <= 0 ? "Please enter a positive number." : true;
+        },
+      },
+    ]);
+    const codexCheckIntervalValue = Math.max(1, Math.round(Number(codexCheckInterval)));
+
+    codexConfig = {
+      path: resolvedCodexPath,
+      timeout_seconds: codexTimeoutValue,
+      check_interval: codexCheckIntervalValue,
+    };
+  } else if (existing?.codex) {
+    codexConfig = existing.codex;
+  } else {
+    codexConfig = {
+      path: DEFAULT_CODEX_BIN,
+      timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
+      check_interval: DEFAULT_CHECK_INTERVAL,
+    };
+  }
 
   const config: RawConfig = {
     github: {
@@ -537,15 +600,11 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
       repos,
       max_concurrent: maxConcurrentValue,
     },
-    claude: {
-      path: resolvedClaudePath,
-      timeout_seconds: claudeTimeoutValue,
-      check_interval: claudeCheckIntervalValue,
-    },
-    codex: {
-      path: resolvedCodexPath,
-      timeout_seconds: codexTimeoutValue,
-      check_interval: codexCheckIntervalValue,
+    claude: claudeConfig,
+    codex: codexConfig,
+    processors: {
+      claude: claudeEnabled,
+      codex: codexEnabled,
     },
   };
 
@@ -684,6 +743,21 @@ export class Config {
 
   get codexCheckInterval(): number {
     return this.config.codex?.check_interval ?? DEFAULT_CHECK_INTERVAL;
+  }
+
+  get enabledProcessors(): ProcessorName[] {
+    const settings = this.config.processors ?? {};
+    const result: ProcessorName[] = [];
+    for (const processor of SUPPORTED_PROCESSORS) {
+      if (settings[processor] !== false) {
+        result.push(processor);
+      }
+    }
+    return result;
+  }
+
+  isProcessorEnabled(processor: ProcessorName): boolean {
+    return this.enabledProcessors.includes(processor);
   }
 }
 

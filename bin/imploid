@@ -2,17 +2,44 @@
 import { main } from "../src/lib/orchestrator";
 import packageJson from "../package.json" assert { type: 'json' };
 const VERSION = packageJson.version ?? '0.0.0';
-import { configureInteractive } from "../src/lib/config";
+import { configureInteractive, SUPPORTED_PROCESSORS } from "../src/lib/config";
+import type { ProcessorName } from "../src/lib/config";
 import { installClaudeCommands } from "../src/lib/claudeCommandsInstaller";
+
+function parseProcessorsArgument(value: string): { processors?: ProcessorName[]; error?: string } {
+  const segments = value
+    .split(",")
+    .map((segment) => segment.trim().toLowerCase())
+    .filter((segment) => segment.length > 0);
+
+  if (!segments.length) {
+    return { error: "--processors expects a comma-separated list (e.g. claude,codex)." };
+  }
+
+  const unique: ProcessorName[] = [];
+  for (const segment of segments) {
+    if (!SUPPORTED_PROCESSORS.includes(segment as ProcessorName)) {
+      return {
+        error: `Unknown processor \"${segment}\". Supported processors: ${SUPPORTED_PROCESSORS.join(", ")}.`,
+      };
+    }
+    if (!unique.includes(segment as ProcessorName)) {
+      unique.push(segment as ProcessorName);
+    }
+  }
+
+  return { processors: unique };
+}
 
 function printHelp(): void {
   console.log(`Usage: imploid [options]
 
 Options:
-  --config [path]      Launch interactive configuration (default: config.json)
-  --help               Show this help message
-  --install-commands   Install Claude command templates into .claude/commands
-  --version            Show the current version
+  --config [path]          Launch interactive configuration (default: config.json)
+  --help                   Show this help message
+  --install-commands       Install Claude command templates into .claude/commands
+  --processors <claude,...>  Run only the specified processors (comma-separated)
+  --version                Show the current version
 
 Version: ${VERSION}`);
 }
@@ -24,6 +51,9 @@ async function run(): Promise<void> {
   let configPath: string | undefined;
   let showVersion = false;
   let installCommandsMode = false;
+  let processorsArg: string | undefined;
+  let processorsOverride: ProcessorName[] | undefined;
+  let processorError: string | undefined;
   const unknownArgs: string[] = [];
 
   for (let i = 0; i < args.length; i += 1) {
@@ -44,13 +74,39 @@ async function run(): Promise<void> {
       configPath = arg.split("=")[1] ?? undefined;
     } else if (arg === "--install-commands") {
       installCommandsMode = true;
+    } else if (arg === "--processors") {
+      const next = args[i + 1];
+      if (next && !next.startsWith("-")) {
+        processorsArg = next;
+        i += 1;
+      } else {
+        processorError = "--processors requires a comma-separated list (e.g. claude,codex).";
+        break;
+      }
+    } else if (arg.startsWith("--processors=")) {
+      processorsArg = arg.split("=")[1] ?? "";
     } else {
       unknownArgs.push(arg);
     }
   }
 
+  if (!processorError && processorsArg !== undefined) {
+    const result = parseProcessorsArgument(processorsArg);
+    if (result.error) {
+      processorError = result.error;
+    } else {
+      processorsOverride = result.processors;
+    }
+  }
+
   if (configMode && typeof configPath === "string") {
     configPath = configPath.trim() || undefined;
+  }
+
+  if (processorError) {
+    console.error(processorError);
+    process.exitCode = 1;
+    return;
   }
 
   if (unknownArgs.length) {
@@ -79,7 +135,7 @@ async function run(): Promise<void> {
       await configureInteractive(configPath);
       return;
     }
-    await main();
+    await main({ processors: processorsOverride });
   } catch (error) {
     console.error("Imploid failed", error);
     process.exitCode = 1;

@@ -1,4 +1,4 @@
-# Imploid 🚀
+# Imploid 🤖
 
 Imploid automates GitHub issue triage by watching for issues marked `agent-ready`, preparing clean worktrees, and delegating them to Claude or Codex command-line agents. The CLI focuses on a fast setup experience so you can keep your backlog moving with minimal ceremony.
 
@@ -21,6 +21,7 @@ Review the [heydiga dotclaude documentation](https://github.com/Hey-Diga/dotclau
 - Run the orchestrator to pull new `agent-ready` issues, spawn agent sessions, and keep labels in sync.
 - Refresh Claude command templates locally so agent prompts stay current.
 - Receive optional Slack or Telegram notifications as issues progress.
+- Toggle Claude and Codex processors globally or override them per run.
 
 ## Requirements ✅
 
@@ -47,6 +48,7 @@ During setup you will:
 3. Confirm the storage directories under `~/.imploid`.
 4. Set concurrency limits and optional Slack/Telegram credentials.
 5. Point Imploid at your local Claude and/or Codex CLI binaries.
+6. Choose which processors (Claude, Codex) should run by default.
 
 The wizard can be rerun at any time. Existing values are pre-filled so updates are quick.
 
@@ -58,10 +60,15 @@ bunx imploid@latest
 # or
 npx imploid@latest
 
-# Show inline help, version information or update the configuration with the wizard
-npx imploid@latest --help
+# Show inline help or version information
+bunx imploid@latest --help
 npx imploid@latest --version
-npx imploid@latest --config
+
+# Re-run the interactive configuration wizard
+bunx imploid@latest --config
+
+# Limit this run to specific processors
+bunx imploid@latest --processors claude
 ```
 
 Imploid will read `~/.imploid/processing-state.json`, poll the configured repositories for `agent-ready` issues, and launch the enabled processors in parallel while respecting your concurrency limits.
@@ -88,11 +95,21 @@ npm install -g imploid
 bun add -g imploid
 ```
 
+Then run:
+
+```bash
+imploid --config            # interactive setup
+imploid                     # run orchestrator
+imploid --install-commands  # refresh Claude command templates
+imploid --processors claude # run only the Claude processor
+```
+
 ## Troubleshooting 🛠️
 
 - **Missing CLI binaries**: ensure `claude` or `codex` are installed and available via `which`. Re-run the configuration wizard to update their paths.
 - **Permission issues**: Imploid expects SSH access (`git@github.com`). Verify you can manually clone each repository.
 - **Claude commands missing**: run `bunx imploid@latest --install-commands` (or `npx imploid@latest --install-commands`) inside the target repository to repopulate `.claude/commands`.
+- **No processors enabled**: rerun `bunx imploid@latest --config` to toggle defaults or pass `--processors claude` (or `codex`) when launching Imploid.
 - **Slack/Telegram notifications not arriving**: confirm tokens and channel/chat IDs in `~/.imploid/config.json` and rerun `--config` if needed.
 - **Stuck state**: only delete `~/.imploid/processing-state.json` if you are sure no automated work is running; otherwise resolve outstanding issues first.
 

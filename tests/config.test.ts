@@ -113,6 +113,7 @@ describe("Config.loadOrCreate", () => {
       { configureSlack: true },
       { slackBotToken: "xoxb-test-token" },
       { slackChannelId: "C123456" },
+      { enabledProcessors: ["claude", "codex"] },
       { claudePath: "/usr/local/bin/claude" },
       { claudeTimeout: "7200" },
       { claudeCheckInterval: "12" },
@@ -155,6 +156,7 @@ describe("Config.loadOrCreate", () => {
     expect(config.claudePath).toBe("/usr/local/bin/claude");
     expect(config.claudeTimeout).toBe(7200);
     expect(config.claudeCheckInterval).toBe(12);
+    expect(config.enabledProcessors).toEqual(["claude", "codex"]);
   });
 
   test("allows updating existing configuration interactively", async () => {
@@ -202,6 +204,7 @@ describe("Config.loadOrCreate", () => {
       { telegramBotToken: "new-telegram" },
       { telegramChatId: "new-chat" },
       { configureSlack: false },
+      { enabledProcessors: ["claude", "codex"] },
       { claudePath: "/opt/claude" },
       { claudeTimeout: "3600" },
       { claudeCheckInterval: "15" },
@@ -250,6 +253,7 @@ describe("Config.loadOrCreate", () => {
     expect(config.codexPath).toBe("/usr/local/bin/codex");
     expect(config.codexTimeout).toBe(1800);
     expect(config.codexCheckInterval).toBe(20);
+    expect(config.enabledProcessors).toEqual(["claude", "codex"]);
   });
 
   test("derives repository list from legacy single repo fields", async () => {

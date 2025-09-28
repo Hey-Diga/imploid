@@ -1,6 +1,6 @@
 import { mkdir } from "fs/promises";
 import { resolve } from "path";
-import { Config } from "./config";
+import { Config, ProcessorName, SUPPORTED_PROCESSORS } from "./config";
 import { GitHubClient, GitHubIssue } from "./githubClient";
 import { IssueState, ProcessStatus } from "./models";
 import { RepoManager } from "./repoManager";
@@ -49,7 +49,7 @@ export class ImploidOrchestrator {
   private readonly notifiers: ProcessorNotifier[] = [];
   private readonly processors: ProcessorDefinition[];
 
-  constructor(private readonly config: Config) {
+  constructor(private readonly config: Config, processorsOverride?: ProcessorName[]) {
     this.githubClient = new GitHubClient(this.config.githubToken);
 
     if (this.config.telegramBotToken && this.config.telegramChatId) {
@@ -61,8 +61,8 @@ export class ImploidOrchestrator {
 
     this.repoManager = new RepoManager(this.config);
 
-    this.processors = [
-      {
+    const definitions: Record<ProcessorName, () => ProcessorDefinition> = {
+      claude: () => ({
         name: "claude",
         displayName: "Claude",
         labels: {
@@ -71,8 +71,8 @@ export class ImploidOrchestrator {
           failed: "claude-failed",
         },
         runner: new ClaudeProcessor(this.config, this.notifiers, this.repoManager),
-      },
-      {
+      }),
+      codex: () => ({
         name: "codex",
         displayName: "Codex",
         labels: {
@@ -81,8 +81,21 @@ export class ImploidOrchestrator {
           failed: "codex-failed",
         },
         runner: new CodexProcessor(this.config, this.notifiers, this.repoManager),
-      },
-    ];
+      }),
+    };
+
+    const activeNames = processorsOverride && processorsOverride.length
+      ? Array.from(new Set(processorsOverride))
+      : this.config.enabledProcessors;
+    const activeSet = new Set<ProcessorName>(activeNames);
+
+    this.processors = SUPPORTED_PROCESSORS.filter((name) => activeSet.has(name)).map((name) => definitions[name]());
+
+    if (!this.processors.length) {
+      throw new Error(
+        "No processors enabled. Update your configuration or pass --processors=<names> when running imploid."
+      );
+    }
   }
 
   private async ensureState(): Promise<void> {
@@ -290,8 +303,12 @@ export class ImploidOrchestrator {
   }
 }
 
-export async function main(): Promise<void> {
+export interface OrchestratorOptions {
+  processors?: ProcessorName[];
+}
+
+export async function main(options: OrchestratorOptions = {}): Promise<void> {
   const config = await Config.loadOrCreate();
-  const orchestrator = new ImploidOrchestrator(config);
+  const orchestrator = new ImploidOrchestrator(config, options.processors);
   await orchestrator.run();
 }
