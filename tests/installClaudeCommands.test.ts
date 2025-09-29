@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installClaudeCommands } from "../src/lib/claudeCommandsInstaller";
@@ -61,6 +61,84 @@ describe("installClaudeCommands", () => {
 
         const nestedContent = await readFile(join(commandsDir, "nested", "example.json"), "utf8");
         expect(JSON.parse(nestedContent)).toEqual({ hello: "world" });
+    });
+
+    test("skips overwriting existing commands when user chooses skip", async () => {
+        const tempDir = await mkdtemp(join(tmpdir(), "claude-skip-test-"));
+        tempDirs.push(tempDir);
+
+        const localCommandsDir = join(tempDir, ".claude", "commands");
+        await mkdir(localCommandsDir, { recursive: true });
+        await writeFile(join(localCommandsDir, "hello.txt"), "keep me", "utf8");
+
+        const fetchImpl = createMockFetch({
+            [apiPath("commands")]: () =>
+                new Response(
+                    JSON.stringify([
+                        {
+                            name: "hello.txt",
+                            path: "commands/hello.txt",
+                            type: "file",
+                            download_url: rawUrl("hello.txt"),
+                        },
+                        {
+                            name: "new.txt",
+                            path: "commands/new.txt",
+                            type: "file",
+                            download_url: rawUrl("new.txt"),
+                        },
+                    ])
+                ),
+            [rawUrl("hello.txt")]: () => new Response("updated", { status: 200 }),
+            [rawUrl("new.txt")]: () => new Response("brand new", { status: 200 }),
+        });
+
+        const prompts: string[] = [];
+        const promptImpl = async ({ relativePath }: { relativePath: string }) => {
+            prompts.push(relativePath);
+            return "skip" as const;
+        };
+
+        await installClaudeCommands({ cwd: tempDir, fetchImpl, promptImpl });
+
+        const retained = await readFile(join(localCommandsDir, "hello.txt"), "utf8");
+        expect(retained).toBe("keep me");
+
+        const newFile = await readFile(join(localCommandsDir, "new.txt"), "utf8");
+        expect(newFile).toBe("brand new");
+
+        expect(prompts).toEqual(["hello.txt"]);
+    });
+
+    test("overwrites existing commands when user chooses overwrite", async () => {
+        const tempDir = await mkdtemp(join(tmpdir(), "claude-overwrite-test-"));
+        tempDirs.push(tempDir);
+
+        const localCommandsDir = join(tempDir, ".claude", "commands");
+        await mkdir(localCommandsDir, { recursive: true });
+        await writeFile(join(localCommandsDir, "hello.txt"), "old content", "utf8");
+
+        const fetchImpl = createMockFetch({
+            [apiPath("commands")]: () =>
+                new Response(
+                    JSON.stringify([
+                        {
+                            name: "hello.txt",
+                            path: "commands/hello.txt",
+                            type: "file",
+                            download_url: rawUrl("hello.txt"),
+                        },
+                    ])
+                ),
+            [rawUrl("hello.txt")]: () => new Response("new content", { status: 200 }),
+        });
+
+        const promptImpl = async () => "overwrite" as const;
+
+        await installClaudeCommands({ cwd: tempDir, fetchImpl, promptImpl });
+
+        const updated = await readFile(join(localCommandsDir, "hello.txt"), "utf8");
+        expect(updated).toBe("new content");
     });
 });
 

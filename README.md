@@ -84,7 +84,7 @@ bunx imploid@latest --install-commands
 npx imploid@latest --install-commands
 ```
 
-Running `--install-commands` recreates `.claude/commands` with the latest templates from [`Hey-Diga/dotclaude`](https://github.com/Hey-Diga/dotclaude), ensuring the Claude agent follows the official workflow scripts.
+Running `--install-commands` refreshes `.claude/commands` with the latest templates from [`Hey-Diga/dotclaude`](https://github.com/Hey-Diga/dotclaude) making easier to follow the workflow.
 
 ## Optional Local Install 📦
 
