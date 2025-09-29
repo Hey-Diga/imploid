@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { main } from "../src/lib/orchestrator";
 import packageJson from "../package.json" assert { type: 'json' };
 const VERSION = packageJson.version ?? '0.0.0';
+const DESCRIPTION = typeof packageJson.description === "string" ? packageJson.description : undefined;
 import { configureInteractive, SUPPORTED_PROCESSORS } from "../src/lib/config";
 import type { ProcessorName } from "../src/lib/config";
 import { installClaudeCommands } from "../src/lib/claudeCommandsInstaller";
@@ -51,6 +52,7 @@ Options:
   --help                   Show this help message
   --install-commands       Install Claude command templates into .claude/commands
   --processors <claude,...>  Run only the specified processors (comma-separated)
+  --quiet                  Suppress the startup banner
   --version                Show the current version
 
 Version: ${VERSION}`);
@@ -67,6 +69,7 @@ async function run(): Promise<void> {
   let processorsOverride: ProcessorName[] | undefined;
   let processorError: string | undefined;
   const unknownArgs: string[] = [];
+  let quietMode = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -97,6 +100,8 @@ async function run(): Promise<void> {
       }
     } else if (arg.startsWith("--processors=")) {
       processorsArg = arg.split("=")[1] ?? "";
+    } else if (arg === "--quiet" || arg === "-q") {
+      quietMode = true;
     } else {
       unknownArgs.push(arg);
     }
@@ -151,7 +156,12 @@ async function run(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    await main({ processors: processorsOverride });
+    await main({
+      processors: processorsOverride,
+      quiet: quietMode,
+      version: VERSION,
+      description: DESCRIPTION,
+    });
   } catch (error) {
     console.error("Imploid failed", error);
     process.exitCode = 1;

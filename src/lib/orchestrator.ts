@@ -1,6 +1,7 @@
 import { mkdir } from "fs/promises";
 import { resolve } from "path";
 import { Config, ProcessorName, SUPPORTED_PROCESSORS } from "./config";
+import { buildStartupBanner } from "./startupBanner";
 import { GitHubClient, GitHubIssue } from "./githubClient";
 import { IssueState, ProcessStatus } from "./models";
 import { RepoManager } from "./repoManager";
@@ -305,10 +306,25 @@ export class ImploidOrchestrator {
 
 export interface OrchestratorOptions {
   processors?: ProcessorName[];
+  quiet?: boolean;
+  version?: string;
+  description?: string;
 }
 
 export async function main(options: OrchestratorOptions = {}): Promise<void> {
   const config = await Config.loadOrCreate();
+
+  if (!options.quiet) {
+    const bannerLines = buildStartupBanner(config, {
+      version: options.version,
+      description: options.description,
+      processorsOverride: options.processors,
+    });
+    for (const line of bannerLines) {
+      console.log(line);
+    }
+  }
+
   const orchestrator = new ImploidOrchestrator(config, options.processors);
   await orchestrator.run();
 }
