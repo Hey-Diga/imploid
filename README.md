@@ -105,6 +105,17 @@ imploid --install-commands  # refresh Claude command templates
 imploid --processors claude # run only the Claude processor
 ```
 
+## Cron Job 🕒
+
+To run Imploid automatically every 5 minutes, add the following lines to your crontab:
+
+```bash
+SHELL=/bin/bash
+HOME=/home/YOUR_USERNAME
+PATH=${HOME}/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+*/5 * * * * bunx imploid@latest >> ${HOME}/.imploid/cron.log 2>&1
+```
+
 ## Troubleshooting 🛠️
 
 - **Missing CLI binaries**: ensure `claude` or `codex` are installed and available via `which`. Re-run the configuration wizard to update their paths.
