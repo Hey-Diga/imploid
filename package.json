@@ -33,6 +33,8 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist",
     "start": "bun run src/runOrchestrator.ts",
+    "lint": "bun run lint:noop",
+    "lint:noop": "echo \"lint skipped; no linter configured\"",
     "test": "bun test",
     "prepublishOnly": "bun test"
   },

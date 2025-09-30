@@ -72,6 +72,7 @@ describe("CodexProcessor", () => {
 		codexPath: "/usr/local/bin/codex",
 		codexTimeout: 60,
 		codexCheckInterval: 0.05,
+		codexPromptPath: undefined,
 	});
 
 	const makeStateManager = (issueNumber: number) => {

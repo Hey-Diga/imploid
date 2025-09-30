@@ -5,7 +5,7 @@ import { StateManager } from "../stateManager";
 import { spawnProcess } from "../../utils/process";
 import { createIssueBranchName } from "../../utils/branch";
 
-import { buildIssuePrompt } from "./prompt";
+import { buildProcessorPrompt } from "./prompt";
 import { ProcessorNotifier, prepareIssueWorkspace, broadcastProcessorError } from "./shared";
 
 export type Notifier = ProcessorNotifier;
@@ -40,7 +40,9 @@ export class ClaudeProcessor {
       branchName
     );
 
-    const commandPrompt = buildIssuePrompt(issueNumber);
+    const commandPrompt = await buildProcessorPrompt(PROCESSOR_NAME, issueNumber, {
+      promptPath: this.config.claudePromptPath,
+    });
 
     const claudeArgs = [
       this.config.claudePath,
