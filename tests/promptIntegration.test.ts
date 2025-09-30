@@ -253,7 +253,7 @@ describe("Prompt Integration Tests", () => {
 
       expect(capturedPrompts.length).toBe(1);
       expect(capturedPrompts[0]).toContain("# GitHub Issue Workflow for Issue 55");
-      expect(capturedPrompts[0]).toContain("## Implementation Phase");
+      expect(capturedPrompts[0]).toContain("## 3. Implementation Phase");
     });
   });
 
