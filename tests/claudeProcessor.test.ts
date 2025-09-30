@@ -63,6 +63,7 @@ describe("ClaudeProcessor", () => {
     claudePath: "claude",
     claudeTimeout: 120,
     claudeCheckInterval: 0.05,
+    claudePromptPath: undefined,
     ...overrides,
   });
 

@@ -33,11 +33,13 @@ export interface RawConfig {
     timeout_seconds?: number;
     check_interval?: number;
     path?: string;
+    prompt_path?: string;
   };
   codex?: {
     timeout_seconds?: number;
     check_interval?: number;
     path?: string;
+    prompt_path?: string;
   };
   processors?: Partial<Record<ProcessorName, boolean>>;
 }
@@ -518,10 +520,23 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
     ]);
     const claudeCheckIntervalValue = Math.max(1, Math.round(Number(claudeCheckInterval)));
 
+    const existingPromptPath = existing?.claude?.prompt_path ?? "";
+    const { claudePromptPath } = await inquirer.prompt<{ claudePromptPath: string }>([
+      {
+        type: "input",
+        name: "claudePromptPath",
+        message: "Claude prompt template name (leave blank for default)",
+        default: existingPromptPath,
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+    const claudePromptPathValue = claudePromptPath || undefined;
+
     claudeConfig = {
       path: resolvedClaudePath,
       timeout_seconds: claudeTimeoutValue,
       check_interval: claudeCheckIntervalValue,
+      ...(claudePromptPathValue ? { prompt_path: claudePromptPathValue } : {}),
     };
   } else {
     claudeConfig = existing?.claude ?? {
@@ -579,10 +594,23 @@ async function interactiveConfigure(configPath: string, existing?: RawConfig): P
     ]);
     const codexCheckIntervalValue = Math.max(1, Math.round(Number(codexCheckInterval)));
 
+    const existingCodexPromptPath = existing?.codex?.prompt_path ?? "";
+    const { codexPromptPath } = await inquirer.prompt<{ codexPromptPath: string }>([
+      {
+        type: "input",
+        name: "codexPromptPath",
+        message: "Codex prompt template name (leave blank for default)",
+        default: existingCodexPromptPath,
+        filter: (value: string) => value.trim(),
+      },
+    ]);
+    const codexPromptPathValue = codexPromptPath || undefined;
+
     codexConfig = {
       path: resolvedCodexPath,
       timeout_seconds: codexTimeoutValue,
       check_interval: codexCheckIntervalValue,
+      ...(codexPromptPathValue ? { prompt_path: codexPromptPathValue } : {}),
     };
   } else if (existing?.codex) {
     codexConfig = existing.codex;
@@ -733,8 +761,16 @@ export class Config {
     return this.config.claude.path ?? DEFAULT_CLAUDE_BIN;
   }
 
+  get claudePromptPath(): string | undefined {
+    return this.config.claude.prompt_path;
+  }
+
   get codexPath(): string {
     return this.config.codex?.path ?? DEFAULT_CODEX_BIN;
+  }
+
+  get codexPromptPath(): string | undefined {
+    return this.config.codex?.prompt_path;
   }
 
   get codexTimeout(): number {

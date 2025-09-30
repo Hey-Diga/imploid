@@ -1,50 +1,108 @@
-export function buildIssuePrompt(issueNumber: number): string {
-	return `# GitHub Issue Workflow for Issue ${issueNumber}
+import { readFile } from "fs/promises";
+import { resolve, isAbsolute, extname } from "path";
+import { fileURLToPath } from "url";
+import type { ProcessorName } from "../config";
 
-## Role & Goal
-You are an autonomous coding assistant. Your responsibility is to handle GitHub issues end-to-end: setup, analysis, implementation, and PR creation. Always document your actions as GitHub comments. Never ask for approval — just execute the plan.
+const DEFAULT_PROMPT_NAMES: Record<ProcessorName, string> = {
+    claude: "claude-default.md",
+    codex: "codex-default.md",
+};
 
----
+const TEMPLATE_CACHE = new Map<string, string>();
+const MODULE_DIR = resolve(fileURLToPath(new URL(".", import.meta.url)));
+const DEFAULT_PROMPT_DIR = resolve(MODULE_DIR, "prompts");
+const USER_PROMPT_SUBDIR = [".imploid", "prompts"] as const;
 
-## Setup Phase
-1. Fetch latest branches: \`git fetch origin\`  
-2. Retrieve issue details:  
-   - Title → \`gh issue view ${issueNumber}\`
+export interface BuildPromptOptions {
+    promptPath?: string;
+}
 
----
+function ensureMdExtension(input: string): string {
+    return extname(input) ? input : `${input}.md`;
+}
 
-## Analysis Phase
-1. Read full issue content + all comments:  
-   - \`gh issue view ${issueNumber} --comments\`  
-2. Create a bullet-point summary of requirements and context.  
-3. **If unclear requirements exist:**  
-   - Generate clarifying questions.  
-   - Post them as a GitHub issue comment.  
-   - Stop until answers are provided.  
+function expandHomePrefix(input: string): string {
+    if (input.startsWith("~/")) {
+        const home = process.env.HOME ?? "";
+        return resolve(home, input.slice(2));
+    }
+    return input;
+}
 
----
+async function loadTemplate(candidate: string): Promise<string | null> {
+    if (TEMPLATE_CACHE.has(candidate)) {
+        return TEMPLATE_CACHE.get(candidate) ?? null;
+    }
 
-## Implementation Phase
-1. Before coding, write or extend tests for the required behavior.  
-2. Implement step by step, committing only after tests pass.  
-3. After **every change**, run:  
-   - \`npm run lint\`  
-   - \`npm run test\`  
-   Continue only if both succeed.  
-4. Ensure code consistency with the existing branch.  
-5. Commit and push changes.  
-6. Create a PR with \`gh pr create\`.  
+    try {
+        const content = await readFile(candidate, "utf8");
+        TEMPLATE_CACHE.set(candidate, content);
+        return content;
+    } catch (error: unknown) {
+        if (typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "ENOENT") {
+            return null;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to read prompt template at ${candidate}: ${message}`);
+    }
+}
 
----
+function getPromptCandidates(
+    processor: ProcessorName,
+    promptPath?: string,
+): { candidates: string[]; displayName: string } {
+    const homeDir = process.env.HOME ? resolve(process.env.HOME) : undefined;
 
-## Communication & Logging
-- After each major phase, post a GitHub comment (setup done, analysis summary, clarifications posted, implementation progress, final PR link).  
-- Keep comments structured in bullet-point form for readability.  
+    if (promptPath) {
+        if (promptPath.startsWith("~/")) {
+            const withExt = ensureMdExtension(promptPath);
+            const expanded = expandHomePrefix(withExt);
+            return { candidates: [expanded], displayName: withExt };
+        }
 
----
+        if (isAbsolute(promptPath)) {
+            const absolutePath = ensureMdExtension(promptPath);
+            return { candidates: [absolutePath], displayName: absolutePath };
+        }
 
-## Completion
-- If clarifications are needed → end with a GitHub issue comment listing questions.  
-- If implementation is complete → end with a PR and a comment linking to it.  
-`;
+        const fileName = ensureMdExtension(promptPath);
+        const candidates: string[] = [];
+        if (homeDir) {
+            candidates.push(resolve(homeDir, ...USER_PROMPT_SUBDIR, fileName));
+        }
+        candidates.push(resolve(DEFAULT_PROMPT_DIR, fileName));
+        return { candidates, displayName: fileName };
+    }
+
+    const defaultName = DEFAULT_PROMPT_NAMES[processor];
+    const candidates: string[] = [];
+    if (homeDir) {
+        candidates.push(resolve(homeDir, ...USER_PROMPT_SUBDIR, defaultName));
+    }
+    candidates.push(resolve(DEFAULT_PROMPT_DIR, defaultName));
+    return { candidates, displayName: defaultName };
+}
+
+function substituteVariables(template: string, issueNumber: number): string {
+    return template.replace(/\$\{issueNumber\}/g, String(issueNumber));
+}
+
+export async function buildProcessorPrompt(
+    processor: ProcessorName,
+    issueNumber: number,
+    options: BuildPromptOptions = {},
+): Promise<string> {
+    const { promptPath } = options;
+    const { candidates, displayName } = getPromptCandidates(processor, promptPath);
+
+    for (const candidate of candidates) {
+        const template = await loadTemplate(candidate);
+        if (template !== null) {
+            return substituteVariables(template, issueNumber);
+        }
+    }
+
+    throw new Error(
+        `Prompt template ${displayName} not found. Checked locations: ${candidates.join(", ")}`,
+    );
 }

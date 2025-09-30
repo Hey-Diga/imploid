@@ -117,9 +117,11 @@ describe("Config.loadOrCreate", () => {
       { claudePath: "/usr/local/bin/claude" },
       { claudeTimeout: "7200" },
       { claudeCheckInterval: "12" },
+      { claudePromptPath: "" },
       { codexPath: "/usr/local/bin/codex" },
       { codexTimeout: "7200" },
-      { codexCheckInterval: "12" }
+      { codexCheckInterval: "12" },
+      { codexPromptPath: "" }
     );
 
     global.fetch = mock(async (input: RequestInfo) => {
@@ -156,7 +158,9 @@ describe("Config.loadOrCreate", () => {
     expect(config.claudePath).toBe("/usr/local/bin/claude");
     expect(config.claudeTimeout).toBe(7200);
     expect(config.claudeCheckInterval).toBe(12);
+    expect(config.claudePromptPath).toBeUndefined();
     expect(config.enabledProcessors).toEqual(["claude", "codex"]);
+    expect(config.codexPromptPath).toBeUndefined();
   });
 
   test("allows updating existing configuration interactively", async () => {
@@ -184,11 +188,13 @@ describe("Config.loadOrCreate", () => {
         path: "/usr/local/bin/claude",
         timeout_seconds: 500,
         check_interval: 10,
+        prompt_path: "claude-existing",
       },
       codex: {
         path: "/usr/local/bin/codex",
         timeout_seconds: 600,
         check_interval: 12,
+        prompt_path: "codex-existing",
       },
     };
     writeFileSync(configPath, JSON.stringify(existingPayload, null, 2));
@@ -208,9 +214,11 @@ describe("Config.loadOrCreate", () => {
       { claudePath: "/opt/claude" },
       { claudeTimeout: "3600" },
       { claudeCheckInterval: "15" },
+      { claudePromptPath: "claude-updated" },
       { codexPath: "/usr/local/bin/codex" },
       { codexTimeout: "1800" },
-      { codexCheckInterval: "20" }
+      { codexCheckInterval: "20" },
+      { codexPromptPath: "codex-updated" }
     );
 
     global.fetch = mock(async (input: RequestInfo) => {
@@ -250,9 +258,11 @@ describe("Config.loadOrCreate", () => {
     expect(config.claudePath).toBe("/opt/claude");
     expect(config.claudeTimeout).toBe(3600);
     expect(config.claudeCheckInterval).toBe(15);
+    expect(config.claudePromptPath).toBe("claude-updated");
     expect(config.codexPath).toBe("/usr/local/bin/codex");
     expect(config.codexTimeout).toBe(1800);
     expect(config.codexCheckInterval).toBe(20);
+    expect(config.codexPromptPath).toBe("codex-updated");
     expect(config.enabledProcessors).toEqual(["claude", "codex"]);
   });
 
