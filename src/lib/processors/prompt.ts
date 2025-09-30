@@ -1,50 +1,65 @@
-export function buildIssuePrompt(issueNumber: number): string {
-	return `# GitHub Issue Workflow for Issue ${issueNumber}
+import { readFile } from "fs/promises";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
-## Role & Goal
-You are an autonomous coding assistant. Your responsibility is to handle GitHub issues end-to-end: setup, analysis, implementation, and PR creation. Always document your actions as GitHub comments. Never ask for approval — just execute the plan.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
----
+function expandHomePath(input: string): string {
+  if (input.startsWith("~/")) {
+    return resolve(process.env.HOME ?? "", input.slice(2));
+  }
+  return input;
+}
 
-## Setup Phase
-1. Fetch latest branches: \`git fetch origin\`  
-2. Retrieve issue details:  
-   - Title → \`gh issue view ${issueNumber}\`
+export async function loadPromptTemplate(
+  processorName: string,
+  customPath?: string
+): Promise<string> {
+  const userPromptsDir = expandHomePath("~/.imploid/prompts/");
+  let templatePath: string;
+  let templateContent: string;
 
----
+  if (customPath) {
+    const customFullPath = resolve(userPromptsDir, `${customPath}.md`);
+    try {
+      templateContent = await readFile(customFullPath, "utf8");
+      return templateContent;
+    } catch (error) {
+      throw new Error(
+        `Failed to load custom prompt from ${customFullPath}: ${(error as Error).message}`
+      );
+    }
+  }
 
-## Analysis Phase
-1. Read full issue content + all comments:  
-   - \`gh issue view ${issueNumber} --comments\`  
-2. Create a bullet-point summary of requirements and context.  
-3. **If unclear requirements exist:**  
-   - Generate clarifying questions.  
-   - Post them as a GitHub issue comment.  
-   - Stop until answers are provided.  
+  const userDefaultPath = resolve(userPromptsDir, `${processorName}-default.md`);
+  try {
+    templateContent = await readFile(userDefaultPath, "utf8");
+    return templateContent;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw new Error(
+        `Failed to load user prompt from ${userDefaultPath}: ${(error as Error).message}`
+      );
+    }
+  }
 
----
+  const defaultPath = resolve(__dirname, "prompts", `${processorName}-default.md`);
+  try {
+    templateContent = await readFile(defaultPath, "utf8");
+    return templateContent;
+  } catch (error) {
+    throw new Error(
+      `Failed to load default prompt from ${defaultPath}: ${(error as Error).message}`
+    );
+  }
+}
 
-## Implementation Phase
-1. Before coding, write or extend tests for the required behavior.  
-2. Implement step by step, committing only after tests pass.  
-3. After **every change**, run:  
-   - \`npm run lint\`  
-   - \`npm run test\`  
-   Continue only if both succeed.  
-4. Ensure code consistency with the existing branch.  
-5. Commit and push changes.  
-6. Create a PR with \`gh pr create\`.  
-
----
-
-## Communication & Logging
-- After each major phase, post a GitHub comment (setup done, analysis summary, clarifications posted, implementation progress, final PR link).  
-- Keep comments structured in bullet-point form for readability.  
-
----
-
-## Completion
-- If clarifications are needed → end with a GitHub issue comment listing questions.  
-- If implementation is complete → end with a PR and a comment linking to it.  
-`;
+export async function buildIssuePrompt(
+  issueNumber: number,
+  processorName: string,
+  customPath?: string
+): Promise<string> {
+  const template = await loadPromptTemplate(processorName, customPath);
+  return template.replace(/\$\{issueNumber\}/g, String(issueNumber));
 }

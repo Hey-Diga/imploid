@@ -33,11 +33,13 @@ export interface RawConfig {
     timeout_seconds?: number;
     check_interval?: number;
     path?: string;
+    prompt_path?: string;
   };
   codex?: {
     timeout_seconds?: number;
     check_interval?: number;
     path?: string;
+    prompt_path?: string;
   };
   processors?: Partial<Record<ProcessorName, boolean>>;
 }
@@ -743,6 +745,14 @@ export class Config {
 
   get codexCheckInterval(): number {
     return this.config.codex?.check_interval ?? DEFAULT_CHECK_INTERVAL;
+  }
+
+  get claudePromptPath(): string | undefined {
+    return this.config.claude.prompt_path;
+  }
+
+  get codexPromptPath(): string | undefined {
+    return this.config.codex?.prompt_path;
   }
 
   get enabledProcessors(): ProcessorName[] {
