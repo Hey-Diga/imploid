@@ -12,6 +12,8 @@ import { ProcessorNotifier } from "./processors/shared";
 import { SlackNotifier } from "../notifiers/slackNotifier";
 import { TelegramNotifier } from "../notifiers/telegramNotifier";
 import { createIssueBranchName } from "../utils/branch";
+import { ForegroundRunner } from "./foregroundRunner";
+import { LockFileManager } from "./lockFileManager";
 
 interface ExtendedIssue extends GitHubIssue {
   repo_name?: string;
@@ -307,6 +309,7 @@ export class ImploidOrchestrator {
 export interface OrchestratorOptions {
   processors?: ProcessorName[];
   quiet?: boolean;
+  foreground?: boolean;
   version?: string;
   description?: string;
 }
@@ -326,5 +329,41 @@ export async function main(options: OrchestratorOptions = {}): Promise<void> {
   }
 
   const orchestrator = new ImploidOrchestrator(config, options.processors);
-  await orchestrator.run();
+
+  if (options.foreground) {
+    const lockManager = new LockFileManager();
+    if (await lockManager.isLocked()) {
+      const holder = await lockManager.getCurrentHolder();
+      console.error(`\nError: Another Imploid instance is already running in foreground mode`);
+      if (holder) {
+        console.error(`  PID: ${holder.pid}`);
+        console.error(`  Started: ${holder.startTime}`);
+      }
+      console.error(`\nTo stop the running instance, use: kill ${holder?.pid || '<PID>'}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const runner = new ForegroundRunner(
+      async () => await orchestrator.run(),
+      { pollingInterval: 60000 }
+    );
+    await runner.start();
+  } else {
+    const lockManager = new LockFileManager();
+    if (await lockManager.isLocked()) {
+      const holder = await lockManager.getCurrentHolder();
+      console.error(`\nError: Imploid is running in foreground mode`);
+      if (holder) {
+        console.error(`  PID: ${holder.pid}`);
+        console.error(`  Started: ${holder.startTime}`);
+      }
+      console.error(`\nCannot run one-shot mode while foreground mode is active.`);
+      console.error(`To stop the foreground instance, use: kill ${holder?.pid || '<PID>'}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    await orchestrator.run();
+  }
 }

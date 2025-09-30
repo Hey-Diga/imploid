@@ -49,6 +49,7 @@ function printHelp(): void {
 
 Options:
   --config [path]          Launch interactive configuration (default: config.json)
+  --foreground             Run in foreground mode with continuous monitoring
   --help                   Show this help message
   --install-commands       Install Claude command templates into .claude/commands
   --processors <claude,...>  Run only the specified processors (comma-separated)
@@ -70,6 +71,7 @@ async function run(): Promise<void> {
   let processorError: string | undefined;
   const unknownArgs: string[] = [];
   let quietMode = false;
+  let foregroundMode = false;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -102,6 +104,8 @@ async function run(): Promise<void> {
       processorsArg = arg.split("=")[1] ?? "";
     } else if (arg === "--quiet" || arg === "-q") {
       quietMode = true;
+    } else if (arg === "--foreground" || arg === "-f") {
+      foregroundMode = true;
     } else {
       unknownArgs.push(arg);
     }
@@ -159,6 +163,7 @@ async function run(): Promise<void> {
     await main({
       processors: processorsOverride,
       quiet: quietMode,
+      foreground: foregroundMode,
       version: VERSION,
       description: DESCRIPTION,
     });

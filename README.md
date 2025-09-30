@@ -61,6 +61,11 @@ bunx imploid@latest
 # or
 npx imploid@latest
 
+# Run in foreground mode with continuous monitoring (polls every 60 seconds)
+bunx imploid@latest --foreground
+# or
+npx imploid@latest --foreground
+
 # Show inline help or version information
 bunx imploid@latest --help
 npx imploid@latest --version
@@ -73,6 +78,17 @@ bunx imploid@latest --processors claude
 ```
 
 Imploid will read `~/.imploid/processing-state.json`, poll the configured repositories for `agent-ready` issues, and launch the enabled processors in parallel while respecting your concurrency limits.
+
+### Foreground Mode
+
+The `--foreground` flag runs Imploid continuously, checking for new issues every 60 seconds:
+
+- **Easy monitoring**: See real-time status updates in your terminal
+- **No cron needed**: Runs continuously without external scheduling
+- **Lock protection**: Prevents multiple instances from running simultaneously
+- **Graceful shutdown**: Press Ctrl+C to stop cleanly
+
+Note: Only one instance (foreground or one-shot) can run at a time. The lock file at `~/.imploid/imploid.lock` ensures this.
 
 ## Install HeyDiga Claude Commands 🧩
 
@@ -101,11 +117,26 @@ Then run:
 ```bash
 imploid --config            # interactive setup
 imploid                     # run orchestrator
+imploid --foreground        # run in continuous monitoring mode
 imploid --install-commands  # refresh Claude command templates
 imploid --processors claude # run only the Claude processor
 ```
 
-## Cron Job 🕒
+## Scheduling Options 🕒
+
+### Option 1: Foreground Mode (Recommended)
+
+Run Imploid in a terminal or screen/tmux session:
+
+```bash
+bunx imploid@latest --foreground
+# or
+npx imploid@latest --foreground
+```
+
+This continuously monitors for issues every 60 seconds without needing cron.
+
+### Option 2: Cron Job
 
 To run Imploid automatically every 5 minutes, add the following lines to your crontab:
 
@@ -115,6 +146,8 @@ HOME=/home/YOUR_USERNAME
 PATH=${HOME}/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5 * * * * bunx imploid@latest >> ${HOME}/.imploid/cron.log 2>&1
 ```
+
+Note: Cron jobs won't run if foreground mode is active due to lock protection.
 
 ## Troubleshooting 🛠️
 
