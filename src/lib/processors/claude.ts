@@ -40,7 +40,11 @@ export class ClaudeProcessor {
       branchName
     );
 
-    const commandPrompt = buildIssuePrompt(issueNumber);
+    const commandPrompt = await buildIssuePrompt(
+      issueNumber,
+      PROCESSOR_NAME,
+      this.config.claudePromptPath
+    );
 
     const claudeArgs = [
       this.config.claudePath,
