@@ -1,3 +1,5 @@
+import { formatCompletionMessage } from "./templates";
+
 interface SlackMessage {
   text?: string;
   blocks?: unknown[];
@@ -53,19 +55,21 @@ export class SlackNotifier {
     });
   }
 
-  async notifyComplete(issueNumber: number, duration: string, repoName?: string): Promise<void> {
-    const repoText = repoName ? ` in ${repoName}` : "";
-    const issueUrl = repoName ? `https://github.com/${repoName}/issues/${issueNumber}` : `#${issueNumber}`;
-    const issueLink = repoName ? `<${issueUrl}|#${issueNumber}>` : `#${issueNumber}`;
-
+  async notifyComplete(
+    issueNumber: number,
+    duration: string,
+    processorName: string,
+    repoName?: string
+  ): Promise<void> {
+    const message = formatCompletionMessage(issueNumber, duration, processorName, repoName);
     await this.sendMessage({
-      text: `Completed issue #${issueNumber} [${duration}]`,
+      text: message,
       blocks: [
         {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `:white_check_mark: *Completed issue ${issueLink}${repoText}*\nDuration: \`${duration}\``,
+            text: message,
           },
         },
       ],

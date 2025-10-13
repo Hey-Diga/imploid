@@ -1,3 +1,5 @@
+import { formatCompletionMessage } from "./templates";
+
 interface TelegramPayload {
   chat_id: string;
   text: string;
@@ -44,8 +46,14 @@ export class TelegramNotifier {
     await this.sendMessage(`🚀 *Started issue #${issueNumber}*: ${title}`);
   }
 
-  async notifyComplete(issueNumber: number, duration: string): Promise<void> {
-    await this.sendMessage(`✅ *Completed issue #${issueNumber}* [${duration}]`);
+  async notifyComplete(
+    issueNumber: number,
+    duration: string,
+    processorName: string,
+    repoName?: string
+  ): Promise<void> {
+    const message = formatCompletionMessage(issueNumber, duration, processorName, repoName);
+    await this.sendMessage(message);
   }
 
   async notifyNeedsInput(issueNumber: number, output: string): Promise<void> {

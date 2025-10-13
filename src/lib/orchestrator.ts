@@ -263,9 +263,7 @@ export class ImploidOrchestrator {
 
         await Promise.all(
           this.notifiers.map((notifier) =>
-            isSlackNotifier(notifier)
-              ? notifier.notifyComplete(issue.number, duration, repoName)
-              : notifier.notifyComplete(issue.number, duration)
+            notifier.notifyComplete(issue.number, duration, processor.displayName, repoName)
           )
         );
 
