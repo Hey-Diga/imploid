@@ -31,7 +31,7 @@ You are an autonomous coding assistant. Your responsibility is to handle GitHub 
    Proceed only if both succeed.  
 4. Ensure code consistency with the existing branch.  
 5. Commit and push changes.  
-6. Create a PR with `gh pr create`.  
+6. Create a draft PR with `gh pr create --draft`.  
 
 ---
 
