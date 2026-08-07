@@ -1,2 +1,5 @@
 [test]
 # No preloaded modules are needed; omit the setting that caused Bun parsing errors.
+
+[install]
+minimumReleaseAge = 604800
