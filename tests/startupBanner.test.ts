@@ -3,7 +3,7 @@ import type { Config, ProcessorName } from "../src/lib/config";
 import { buildStartupBanner } from "../src/lib/startupBanner";
 
 describe("buildStartupBanner", () => {
-    test("summarises configured repos, processors, and notifications", () => {
+    test("includes ASCII art and summarises configured repos, processors, and notifications", () => {
         const originalHome = process.env.HOME;
         process.env.HOME = "/home/test";
 
@@ -35,21 +35,21 @@ describe("buildStartupBanner", () => {
                 processorsOverride: ["claude"],
             });
 
-            expect(lines).toEqual([
-                "imploid v1.2.3 - Coordinates Claude and Codex to work GitHub issues in parallel.",
-                "",
-                "Repos: 3 configured -> hey/mobile-app, hey/marketing-site, +1 more (cache: ~/.imploid/repos)",
-                "Processors: claude active timeout=3600s interval=5s | codex skipped (--processors)",
-                "Concurrency: up to 3 issues at a time",
-                "Notifications: Slack -> C012345 ; Telegram -> off",
-                "",
-            ]);
+            expect(lines[0]).toContain("_");
+            expect(lines[0]).toContain("|");
+            expect(lines[1]).toBe("imploid v1.2.3 - Coordinates Claude and Codex to work GitHub issues in parallel.");
+            expect(lines[2]).toBe("");
+            expect(lines[3]).toBe("Repos: 3 configured -> hey/mobile-app, hey/marketing-site, +1 more (cache: ~/.imploid/repos)");
+            expect(lines[4]).toBe("Processors: claude active timeout=3600s interval=5s | codex skipped (--processors)");
+            expect(lines[5]).toBe("Concurrency: up to 3 issues at a time");
+            expect(lines[6]).toBe("Notifications: Slack -> C012345 ; Telegram -> off");
+            expect(lines[7]).toBe("");
         } finally {
             process.env.HOME = originalHome;
         }
     });
 
-    test("uses fallback text when no repos or processors enabled", () => {
+    test("includes ASCII art and uses fallback text when no repos or processors enabled", () => {
         const config = {
             githubRepos: [],
             baseRepoPath: "",
@@ -68,14 +68,14 @@ describe("buildStartupBanner", () => {
 
         const lines = buildStartupBanner(config);
 
-        expect(lines).toEqual([
-            "imploid vunknown - undefined",
-            "",
-            "Repos: none configured (run imploid --config)",
-            "Processors: claude disabled (config) | codex disabled (config)",
-            "Concurrency: up to 2 issues at a time",
-            "Notifications: Slack -> off ; Telegram -> off",
-            "",
-        ]);
+        expect(lines[0]).toContain("_");
+        expect(lines[0]).toContain("|");
+        expect(lines[1]).toBe("imploid vunknown - undefined");
+        expect(lines[2]).toBe("");
+        expect(lines[3]).toBe("Repos: none configured (run imploid --config)");
+        expect(lines[4]).toBe("Processors: claude disabled (config) | codex disabled (config)");
+        expect(lines[5]).toBe("Concurrency: up to 2 issues at a time");
+        expect(lines[6]).toBe("Notifications: Slack -> off ; Telegram -> off");
+        expect(lines[7]).toBe("");
     });
 });
