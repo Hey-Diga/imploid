@@ -36,6 +36,13 @@ describe("buildStartupBanner", () => {
             });
 
             expect(lines).toEqual([
+                "  _                 _       _     _ ",
+                " (_)_ __ ___  _ __ | | ___ (_) __| |",
+                " | | '_ ` _ \\| '_ \\| |/ _ \\| |/ _` |",
+                " | | | | | | | |_) | | (_) | | (_| |",
+                " |_|_| |_| |_| .__/|_|\\___/|_|\\__,_|",
+                "             |_|                    ",
+                "",
                 "imploid v1.2.3 - Coordinates Claude and Codex to work GitHub issues in parallel.",
                 "",
                 "Repos: 3 configured -> hey/mobile-app, hey/marketing-site, +1 more (cache: ~/.imploid/repos)",
@@ -69,6 +76,13 @@ describe("buildStartupBanner", () => {
         const lines = buildStartupBanner(config);
 
         expect(lines).toEqual([
+            "  _                 _       _     _ ",
+            " (_)_ __ ___  _ __ | | ___ (_) __| |",
+            " | | '_ ` _ \\| '_ \\| |/ _ \\| |/ _` |",
+            " | | | | | | | |_) | | (_) | | (_| |",
+            " |_|_| |_| |_| .__/|_|\\___/|_|\\__,_|",
+            "             |_|                    ",
+            "",
             "imploid vunknown - undefined",
             "",
             "Repos: none configured (run imploid --config)",
