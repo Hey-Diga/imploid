@@ -40,6 +40,6 @@
     "@types/node": "20.11.19"
   },
   "dependencies": {
-    "inquirer": "^12.9.6"
+    "inquirer": "^14.2.2"
   }
 }
