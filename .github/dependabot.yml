@@ -1,0 +1,30 @@
+version: 2
+# Weekly version updates with a 7-day cooldown, so a compromised release has
+# time to be pulled. Non-major updates come grouped per ecosystem; majors come
+# one per package. Non-major security updates are grouped into one PR per
+# ecosystem (`security-updates`); security updates skip the cooldown.
+updates:
+  - package-ecosystem: bun
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+      bun-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
