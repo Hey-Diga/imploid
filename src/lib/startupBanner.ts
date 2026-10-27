@@ -1,5 +1,14 @@
 import { Config, ProcessorName, SUPPORTED_PROCESSORS } from "./config";
 
+const ASCII_ART = `
+ _                 _       _     _
+(_)_ __ ___  _ __ | | ___ (_) __| |
+| | '_ \` _ \\| '_ \\| |/ _ \\| |/ _\` |
+| | | | | | | |_) | | (_) | | (_| |
+|_|_| |_| |_| .__/|_|\\___/|_|\\__,_|
+            |_|
+`;
+
 export interface StartupBannerOptions {
 	version?: string;
 	description?: string;
@@ -93,6 +102,7 @@ export function buildStartupBanner(
 	const version = options.version ?? "unknown";
 
 	const lines = [
+		ASCII_ART,
 		`imploid v${version} - ${options.description}`,
 		"",
 		formatRepoLine(config),
