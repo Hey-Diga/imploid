@@ -40,6 +40,6 @@
     "@types/node": "26.6.6"
   },
   "dependencies": {
-    "inquirer": "^12.9.6"
+    "inquirer": "^14.3.0"
   }
 }
